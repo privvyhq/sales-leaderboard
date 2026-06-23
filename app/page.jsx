@@ -6,7 +6,7 @@ import {
   AlertCircle, CheckCircle2, ClipboardList, X, Edit3, MapPin,
   Calendar, User, FileText, Trash2, FileSignature, Settings,
   Download, Eye, Users, UserCheck, BarChart3, Upload, File,
-  Image, ChevronDown, Phone, Mail, Building, Home
+  Image, ChevronDown, Phone, Mail, Building, Home, ScrollText
 } from 'lucide-react';
 
 const SUPABASE_URL = 'https://hhpaxztybnhtflstjfqo.supabase.co';
@@ -105,6 +105,11 @@ export default function IronbridgeApp() {
   const [loiBusy, setLoiBusy] = useState(false);
   const [loiMsg, setLoiMsg] = useState('');
 
+  // PSA
+  const [psaForm, setPsaForm] = useState(blankPsa());
+  const [psaBusy, setPsaBusy] = useState(false);
+  const [psaMsg, setPsaMsg] = useState('');
+
   // Profile
   const [profilePhone, setProfilePhone] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
@@ -151,6 +156,29 @@ export default function IronbridgeApp() {
       offer_date: new Date().toISOString().split('T')[0],
       property_address: '', city: '', state: 'TX', zip: '', seller_name: '',
       cash_offer: '', include_subto: true, due_diligence_days: 10, closing_days: 15,
+    };
+  }
+
+  function blankPsa() {
+    return {
+      property_address: '', city: '', state: 'TX', zip: '',
+      property_apn: '', legal_description: '',
+      earnest_money: '150',
+      existing_1st_mortgage: '', existing_2nd_mortgage: '',
+      new_loan: '', seller_carryback: '',
+      cash_to_seller: '', cash_to_seller_exact: true,
+      agent_fee_cash: '', agent_fee_approximate: true,
+      total_price: '',
+      coe_date: '',
+      escrow_company: 'Closed Title', escrow_officer: '', escrow_phone: '', escrow_email: '',
+      association: '',
+      seller_1_name: '', seller_2_name: '',
+      seller_address: '', seller_1_phone: '', seller_2_phone: '',
+      seller_1_email: '', seller_2_email: '',
+      inspection_days: '15',
+      occupancy_seller: true, occupancy_notes: '',
+      addendum_subject_to: true, addendum_post_closing: false, addendum_seller_ack: false,
+      additional_terms: '', personal_property: '',
     };
   }
 
@@ -706,6 +734,7 @@ ${sub}
     { id:'offers', label:`Offers (${deals.length})`, icon:<ClipboardList size={16}/> },
     { id:'new', label:'New Offer', icon:<Plus size={16}/> },
     { id:'loi', label:'LOI', icon:<FileSignature size={16}/> },
+    { id:'psa', label:'PSA', icon:<ScrollText size={16}/> },
     { id:'agents', label:`Agents (${agents.length})`, icon:<UserCheck size={16}/> },
     { id:'buyers', label:`Buyers (${buyers.length})`, icon:<Users size={16}/> },
     { id:'reports', label:'Reports', icon:<BarChart3 size={16}/> },
@@ -1032,6 +1061,42 @@ ${sub}
         )}
 
         {/* ── PROFILE TAB ── */}
+        {tab==='psa'&&(
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* PSA Form */}
+            <div className="bg-white rounded-2xl shadow-2xl p-5 md:p-6 overflow-y-auto" style={{maxHeight:'90vh'}}>
+              <h2 className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">
+                <ScrollText size={22} style={{color:BURNT_ORANGE}}/> Generate PSA
+              </h2>
+              <p className="text-sm text-gray-500 mb-4">Purchase Contract &amp; Escrow Instructions · QP Holdings LLC</p>
+              <PsaForm psa={psaForm} setPsa={setPsaForm}/>
+              {psaMsg&&<div className={`mt-4 p-3 rounded-lg text-sm flex items-center gap-2 ${psaMsg.startsWith('Error')?'bg-red-50 text-red-800':'bg-green-50 text-green-800'}`}>{psaMsg.startsWith('Error')?<AlertCircle size={16}/>:<CheckCircle2 size={16}/>}{psaMsg}</div>}
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <button onClick={()=>downloadPsaWord(psaForm,user,setPsaBusy,setPsaMsg)} disabled={psaBusy}
+                  style={{background:`linear-gradient(135deg,${TEAL} 0%,${NAVY} 100%)`}}
+                  className="text-white font-semibold py-3 rounded-lg disabled:opacity-60 flex items-center justify-center gap-2">
+                  {psaBusy?<Loader2 size={18} className="animate-spin"/>:<Download size={18}/>}Word
+                </button>
+                <button onClick={()=>downloadPsaPdf(psaForm,user,setPsaBusy,setPsaMsg)} disabled={psaBusy}
+                  style={{background:`linear-gradient(135deg,${BURNT_ORANGE} 0%,#a04f12 100%)`}}
+                  className="text-white font-semibold py-3 rounded-lg disabled:opacity-60 flex items-center justify-center gap-2">
+                  {psaBusy?<Loader2 size={18} className="animate-spin"/>:<Download size={18}/>}PDF
+                </button>
+              </div>
+            </div>
+            {/* PSA Preview */}
+            <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+              <div style={{background:NAVY}} className="px-5 py-3 flex items-center gap-2">
+                <Eye size={18} className="text-white"/>
+                <span className="text-white font-semibold text-sm">Live Preview — Basic Terms</span>
+              </div>
+              <div className="p-4 md:p-6 overflow-auto" style={{maxHeight:'85vh'}}>
+                <PsaPreview psa={psaForm}/>
+              </div>
+            </div>
+          </div>
+        )}
+
         {tab==='profile'&&(
           <div className="bg-white rounded-2xl shadow-2xl p-5 md:p-6 max-w-lg">
             <h2 className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2"><Settings size={22} style={{color:BURNT_ORANGE}}/> Profile</h2>
@@ -1516,6 +1581,631 @@ function LoiPreviewBlock({ data }) {
       <p style={{marginTop:'18pt'}}>Sincerely,</p>
       <p style={{fontWeight:'bold',color:NAVY,marginTop:'18pt',marginBottom:0}}>{data.sender_name}</p>
       <p style={{fontSize:'8pt',color:'#6b7280',marginTop:'2pt'}}>{COMPANY} · {data.sender_phone||''} {data.sender_phone&&data.sender_email?'·':''} {data.sender_email}</p>
+    </div>
+  );
+}
+
+// ============================================================
+// PSA HELPERS
+// ============================================================
+
+const BUYER_FIXED = {
+  name: 'QP Holdings, LLC, a Wyoming limited liability company ("Buyer")',
+  shortName: 'QP Holdings, LLC',
+  address: '30 N Gould St. Ste: R\nSheridan, WY 82801',
+  phone: '214-702-6883',
+  signer: 'Michael Harry',
+  title: 'Authorized Signer',
+};
+
+function fmtDollars(val) {
+  if (!val || val === '') return '';
+  const n = parseFloat(val);
+  if (isNaN(n)) return '';
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function calcTotal(p) {
+  if (p.total_price) return parseFloat(p.total_price);
+  return (
+    (parseFloat(p.earnest_money) || 0) +
+    (parseFloat(p.existing_1st_mortgage) || 0) +
+    (parseFloat(p.existing_2nd_mortgage) || 0) +
+    (parseFloat(p.new_loan) || 0) +
+    (parseFloat(p.seller_carryback) || 0) +
+    (parseFloat(p.cash_to_seller) || 0) +
+    (parseFloat(p.agent_fee_cash) || 0)
+  );
+}
+
+function fmtCoeDate(d) {
+  if (!d) return { month: '___', day: '___', year: '___' };
+  const dt = new Date(d + 'T00:00:00');
+  return {
+    month: dt.toLocaleString('en-US', { month: 'long' }),
+    day: String(dt.getDate()),
+    year: String(dt.getFullYear()),
+  };
+}
+
+async function downloadPsaWord(psa, user, setBusy, setMsg) {
+  if (!psa.property_address || !psa.seller_1_name) {
+    setMsg('Property address and seller name are required'); return;
+  }
+  setBusy(true); setMsg('');
+  try {
+    const html = generatePsaHtml(psa);
+    const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(psa.property_address || 'PSA').replace(/[^a-z0-9]/gi, '_')}_PSA.doc`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setMsg('Word downloaded'); setTimeout(() => setMsg(''), 3000);
+  } catch (err) { setMsg(`Error: ${err.message}`); }
+  finally { setBusy(false); }
+}
+
+async function downloadPsaPdf(psa, user, setBusy, setMsg) {
+  if (!psa.property_address || !psa.seller_1_name) {
+    setMsg('Property address and seller name are required'); return;
+  }
+  setBusy(true); setMsg('');
+  try {
+    await new Promise((resolve, reject) => {
+      if (document.querySelector('script[src*="jspdf"]')) return resolve();
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+      s.onload = resolve; s.onerror = reject;
+      document.body.appendChild(s);
+    });
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+    generatePsaPdfContent(doc, psa);
+    doc.save(`${(psa.property_address || 'PSA').replace(/[^a-z0-9]/gi, '_')}_PSA.pdf`);
+    setMsg('PDF downloaded'); setTimeout(() => setMsg(''), 3000);
+  } catch (err) { setMsg(`Error: ${err.message}`); }
+  finally { setBusy(false); }
+}
+
+function generatePsaHtml(p) {
+  const coe = fmtCoeDate(p.coe_date);
+  const total = calcTotal(p);
+  const fullAddr = [p.property_address, p.city, p.state, p.zip].filter(Boolean).join(', ');
+
+  const priceRow = (label, val, note = '') => val
+    ? `<tr><td style="padding:2pt 8pt;font-family:Courier New;font-size:10pt;white-space:nowrap;">$&nbsp;${fmtDollars(val)}</td><td style="padding:2pt 8pt;font-family:Arial;font-size:10pt;">${label}${note ? `<br><span style="font-size:9pt;">${note}</span>` : ''}</td></tr>`
+    : `<tr><td style="padding:2pt 8pt;font-family:Arial;font-size:10pt;color:#aaa;">$____________</td><td style="padding:2pt 8pt;font-family:Arial;font-size:10pt;color:#aaa;">${label}</td></tr>`;
+
+  const checkBox = (checked) => checked ? '&#9746;' : '&#9744;';
+
+  return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8">
+<style>
+@page { size:8.5in 11in; margin:.75in .75in .75in .75in; }
+body { font-family:Arial,sans-serif; font-size:10pt; line-height:1.4; }
+h1 { font-size:12pt; text-align:center; font-weight:bold; }
+h2 { font-size:11pt; font-weight:bold; }
+p { margin:6pt 0; text-align:justify; }
+.section { margin-top:12pt; }
+table { border-collapse:collapse; }
+.basic-terms td { padding:4pt 6pt; vertical-align:top; }
+</style></head><body>
+
+<h1>PURCHASE CONTRACT AND ESCROW INSTRUCTIONS</h1>
+
+<p><strong>THIS PURCHASE CONTRACT AND ESCROW INSTRUCTIONS</strong> ("Contract"), is effective as of the latest date this Contract is executed by the Parties as set forth below (the "Effective Date"), and comprises the entire contract and agreement between Seller (defined in Section 1.9 below) and Buyer (defined in Section 1.9 below).</p>
+
+<p><strong>1. BASIC TERMS.</strong> This Section 1 defines the Basic Terms of this Contract.</p>
+
+<table class="basic-terms" style="width:100%;">
+<tr><td style="width:130pt;font-weight:bold;vertical-align:top;">1.1&nbsp;&nbsp;Property Address:</td><td><strong><u>${fullAddr || '___________________________________'}</u></strong></td></tr>
+<tr><td style="height:8pt;"></td><td></td></tr>
+<tr><td style="font-weight:bold;vertical-align:top;">1.2&nbsp;&nbsp;Property APN:</td><td><u>${p.property_apn || '__________________________'}</u></td></tr>
+<tr><td style="font-weight:bold;vertical-align:top;padding-top:6pt;">1.3&nbsp;&nbsp;Legal Description:</td><td style="padding-top:6pt;">${p.legal_description ? `<u>${p.legal_description}</u>` : '_____________________________________________<br>_____________________________________________;'}<br><br>${checkBox(false)}&nbsp;See Exhibit A attached (if lengthy);&nbsp;&nbsp;&nbsp;${checkBox(false)}&nbsp;To be provided by Escrow Agent.</td></tr>
+<tr><td style="font-weight:bold;vertical-align:top;padding-top:6pt;">1.4&nbsp;&nbsp;The Property:</td><td style="padding-top:6pt;">The real property bearing the street address in Section 1.1, the APN in Section 1.2 and the legal description in Section 1.3 together with all improvements, fixtures, and appurtenances thereon or incidental thereto, plus the personal property described in Section 1.12.</td></tr>
+<tr><td style="font-weight:bold;vertical-align:top;padding-top:10pt;">1.5&nbsp;&nbsp;Purchase Price:</td><td style="padding-top:10pt;">
+<table>
+${priceRow('Earnest Money Deposit (the "Deposit")', p.earnest_money)}
+${priceRow(`Approximate Existing 1st Mortgage (Buyer Purchasing Subject To)`, p.existing_1st_mortgage)}
+${p.existing_2nd_mortgage ? priceRow('Approximate Existing 2nd Mortgage (Buyer Purchasing Subject To)', p.existing_2nd_mortgage) : '<tr><td style="padding:2pt 8pt;color:#aaa;">$____________</td><td style="padding:2pt 8pt;color:#aaa;">Approximate Existing 2nd Mortgage (Buyer Purchasing Subject To)</td></tr>'}
+<tr><td style="padding:2pt 8pt;color:#aaa;">$____________</td><td style="padding:2pt 8pt;color:#aaa;">New Loan to Buyer (From Lender Other Than Seller)</td></tr>
+<tr><td style="padding:2pt 8pt;color:#aaa;">$____________</td><td style="padding:2pt 8pt;color:#aaa;">Seller Carryback Financing</td></tr>
+${p.cash_to_seller ? `<tr><td style="padding:2pt 8pt;font-family:Courier New;font-size:10pt;">$&nbsp;${fmtDollars(p.cash_to_seller)}</td><td style="padding:2pt 8pt;">Cash to Seller at COE &nbsp;&nbsp; ${checkBox(!p.cash_to_seller_exact)}&nbsp;Approximate or ${checkBox(p.cash_to_seller_exact)}&nbsp;Exact</td></tr>` : '<tr><td style="padding:2pt 8pt;color:#aaa;">$____________</td><td style="padding:2pt 8pt;color:#aaa;">Cash to Seller at COE</td></tr>'}
+${p.agent_fee_cash ? `<tr><td style="padding:2pt 8pt;font-family:Courier New;font-size:10pt;">$&nbsp;${fmtDollars(p.agent_fee_cash)}</td><td style="padding:2pt 8pt;">Cash at COE (to include agents fee) &nbsp;&nbsp; ${checkBox(p.agent_fee_approximate)}&nbsp;Approximate or ${checkBox(!p.agent_fee_approximate)}&nbsp;Exact</td></tr>` : ''}
+<tr><td style="padding:4pt 8pt;font-family:Courier New;font-size:10pt;font-weight:bold;border-top:1pt solid #000;">$&nbsp;${fmtDollars(total)}</td><td style="padding:4pt 8pt;font-weight:bold;border-top:1pt solid #000;"><strong>Total Purchase Price</strong> &nbsp;&nbsp; ${checkBox(true)}&nbsp;Approximate or ${checkBox(false)}&nbsp;Exact</td></tr>
+</table>
+</td></tr>
+
+<tr><td style="font-weight:bold;vertical-align:top;padding-top:10pt;">1.6&nbsp;&nbsp;Close of Escrow:<br>("COE")</td><td style="padding-top:10pt;">
+${checkBox(true)}&nbsp;${coe.month}___${coe.day}___, ${coe.year}; or<br>
+${checkBox(false)}&nbsp;____ days after Effective Date; or<br>
+${checkBox(false)}&nbsp;____ days after ____________________________
+</td></tr>
+
+<tr><td style="font-weight:bold;vertical-align:top;padding-top:10pt;">1.7&nbsp;&nbsp;Escrow Agent:</td><td style="padding-top:10pt;">
+<u>${p.escrow_company || '____________________________________'}</u><br><br>
+Escrow Officer: <u>${p.escrow_officer || '____________________________'}</u><br>
+Telephone: <u>${p.escrow_phone || '____________________________'}</u><br>
+Email: <u>${p.escrow_email || '____________________________'}</u>
+</td></tr>
+
+<tr><td style="font-weight:bold;vertical-align:top;padding-top:10pt;">1.8&nbsp;&nbsp;Association(s):</td><td style="padding-top:10pt;">${p.association || '_____________________________________________'}</td></tr>
+
+<tr><td style="font-weight:bold;vertical-align:top;padding-top:10pt;">1.9&nbsp;&nbsp;Parties:</td><td style="padding-top:10pt;">
+<strong>Seller:</strong><br>
+<strong><u>${p.seller_1_name || '____________________________'}</u></strong><br>
+${p.seller_2_name ? `<u>${p.seller_2_name}</u><br>` : ''}
+(Collectively the "Seller")<br><br>
+Address: <u>${p.seller_address || '____________________________________'}</u><br>
+Telephone: <u>${p.seller_1_phone || '____________________________'}</u>${p.seller_2_phone ? `&nbsp;&nbsp;&nbsp;<u>${p.seller_2_phone}</u>` : ''}<br>
+Email: <u>${p.seller_1_email || '____________________________'}</u>${p.seller_2_email ? `&nbsp;&nbsp;&nbsp;<u>${p.seller_2_email}</u>` : ''}<br><br>
+<strong>Buyer:</strong><br>
+${BUYER_FIXED.name}<br><br>
+Address: ${BUYER_FIXED.address.replace('\n', '<br>')}<br>
+Telephone: <u>${BUYER_FIXED.phone}</u>
+</td></tr>
+
+<tr><td style="font-weight:bold;vertical-align:top;padding-top:10pt;">1.10&nbsp;&nbsp;Inspection Period:</td><td style="padding-top:10pt;"><u>${p.inspection_days || '15'}</u> Business Days</td></tr>
+
+<tr><td style="font-weight:bold;vertical-align:top;padding-top:10pt;">1.11&nbsp;&nbsp;Specific Closing Costs:</td><td style="padding-top:10pt;">
+<strong>Escrow fees and costs:</strong><br>
+${checkBox(false)}&nbsp;50% by Buyer and ${checkBox(false)}&nbsp;50% by Seller;&nbsp;&nbsp;OR<br>
+${checkBox(true)}&nbsp;100% by Buyer;&nbsp;&nbsp;OR&nbsp;&nbsp;${checkBox(false)}&nbsp;100% by Seller.<br><br>
+<strong>Standard Title Policy:</strong>&nbsp;&nbsp;&nbsp;${checkBox(false)}&nbsp;Seller&nbsp;&nbsp;&nbsp;${checkBox(true)}&nbsp;Buyer<br><br>
+<strong>HOA transfer fee(s):</strong>&nbsp;&nbsp;&nbsp;${checkBox(false)}&nbsp;Seller&nbsp;&nbsp;&nbsp;${checkBox(true)}&nbsp;Buyer<br><br>
+<strong>HOA capital improvement and reserve fees:</strong>&nbsp;&nbsp;&nbsp;${checkBox(false)}&nbsp;Seller&nbsp;&nbsp;&nbsp;${checkBox(false)}&nbsp;Buyer<br><br>
+<strong>HOA disclosure fee(s):</strong>&nbsp;&nbsp;&nbsp;${checkBox(false)}&nbsp;Seller&nbsp;&nbsp;&nbsp;${checkBox(false)}&nbsp;Buyer<br><br>
+Closing fee of $____________ (if closing at law firm not through Escrow Agent):&nbsp;&nbsp;&nbsp;${checkBox(false)}&nbsp;Seller&nbsp;&nbsp;&nbsp;${checkBox(true)}&nbsp;Buyer
+</td></tr>
+
+<tr><td style="font-weight:bold;vertical-align:top;padding-top:10pt;">1.12&nbsp;&nbsp;Personal Property:</td><td style="padding-top:10pt;">${p.personal_property || 'N/A'}</td></tr>
+
+<tr><td style="font-weight:bold;vertical-align:top;padding-top:10pt;">1.13&nbsp;&nbsp;Addendums:</td><td style="padding-top:10pt;">
+${checkBox(p.addendum_subject_to)}&nbsp;Subject To Addendum (See attached).<br>
+${checkBox(p.addendum_post_closing)}&nbsp;Post-Closing Possession Addendum (See attached).<br>
+${checkBox(p.addendum_seller_ack)}&nbsp;Seller Acknowledgements (See attached or executed at COE).
+</td></tr>
+
+<tr><td style="font-weight:bold;vertical-align:top;padding-top:10pt;">1.14&nbsp;&nbsp;Additional Terms:</td><td style="padding-top:10pt;">${p.additional_terms || '____________________________________________'}</td></tr>
+
+<tr><td style="font-weight:bold;vertical-align:top;padding-top:10pt;">1.15&nbsp;&nbsp;Occupancy:</td><td style="padding-top:10pt;">
+${checkBox(p.occupancy_seller)}&nbsp;There are no parties in occupancy of the Property other than Seller and Buyer will be given occupancy of the Property at Closing unless otherwise specified herein: ${p.occupancy_notes ? `<u>${p.occupancy_notes}</u>` : '__________________________________________'}; OR<br><br>
+${checkBox(!p.occupancy_seller)}&nbsp;Buyer understands that the Property is leased and the tenant may continue in possession of the Property after Closing unless otherwise agreed in writing.
+</td></tr>
+</table>
+
+<p style="text-align:center;margin-top:24pt;">Seller Initials: ______/______&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Buyer Initials: ______/______</p>
+<p style="page-break-after:always;"></p>
+
+<!-- SECTIONS 2-13 BOILERPLATE -->
+<h2>2. PURCHASE AND SALE OF PROPERTY.</h2>
+<p>For the Purchase Price and in accordance with the terms and conditions set forth in this Contract, Seller agrees to sell and Buyer agrees to buy the Property identified in Section 1.4. The personal property to be conveyed as part of the Property includes, but is not limited to, built in appliances, ceiling fans, remote controls to operate any fixture or equipment on the Property, central vacuum, hose and attachments, draperies and other window coverings, fireplace equipment (affixed), floor coverings (affixed), free standing range/oven, garage door openers, light fixtures, mailbox, media antennas/satellite dishes (affixed), outdoor fountains and lighting, outdoor landscaping, shutters and awnings, smart home devices and access thereto (i.e. video doorbell, automated thermostat), flush-mounted speakers, storage sheds, storm windows and doors, gas-log, pellet and wood-burning stoves, built in BBQ grills, affixed timers, towel, curtain and drapery rods, wall mounted TV brackets and hardware (excluding TVs), water-misting systems, window and door screens, sun shades, solar systems owned by Seller, security system and alarms owned by Seller, water softeners owned by Seller, water purification systems owned by Seller, and pool and spa covers and equipment.</p>
+
+<h2>3. PURCHASE PRICE; METHOD OF PAYMENT.</h2>
+<p>The Purchase Price shall be paid by Buyer pursuant to the provisions of Section 1.5.</p>
+
+<h2>4. STATUS OF TITLE.</h2>
+<p><strong>4.1 Title Documents.</strong> As soon as practical following the Effective Date of this Contract, Escrow Agent shall cause to be issued and delivered to Buyer: (a) a current commitment for an ALTA Residential Owner's Policy of Title Insurance ("Title Report"); and (b) copies of all documents referenced as exceptions therein (together with the Title Report, the "Title Documents").</p>
+<p><strong>4.2 Buyer's Review of Title.</strong> Buyer shall have ten (10) days from receipt of the Title Documents or from any amendments thereto to provide Seller with notice of any items shown in the Title Documents for which Buyer disapproves.</p>
+<p><strong>4.3 Seller's Spouse to Execute Contract or Disclaimer Deed.</strong> If Seller is married and the spouse has not executed this Contract, Seller's spouse shall execute this Contract or execute and deliver a disclaimer deed for the Property to the Escrow Agent within three (3) days from the Effective Date.</p>
+
+<h2>5. DISCLOSURE</h2>
+<p><strong>5.1 Septic or Alternative Wastewater Treatment Facility.</strong> If the Property is on a septic system or alternative system that uses a septic tank, the system must have a pre-transfer inspection performed within six (6) months prior to COE as required by Texas Department of Environmental Quality. Seller shall deliver the wastewater treatment facility inspection report to Buyer within five (5) days of the Effective Date.</p>
+<p><strong>5.2 Lead-Based Paint Disclosure.</strong> If the residence or other structures on the Property were built prior to 1978, Seller, within five (5) days from the Effective Date shall notify Buyer of any known lead-based paint ("LBP") or LBP hazards on the Property.</p>
+<p>If the residence or other structures on the Property were constructed prior to 1978: (BUYER'S INITIALS REQUIRED) ____________ ____________</p>
+<p>If the residence or other structures on the Property were constructed in 1978 or later: (BUYER'S INITIALS REQUIRED) ____________ ____________</p>
+<p><strong>5.3 Changes to Property Prior to COE.</strong> Seller shall provide notice to Buyer within three (3) days of any material change(s) to the Property. Buyer shall have five (5) days from Buyer's receipt of such notice to notify Seller if Buyer elects to cancel this Contract.</p>
+
+<h2>6. INSPECTION OF PROPERTY.</h2>
+<p><strong>6.1 Inspection Period.</strong> Within the time set forth in Section 1.10, Buyer, at Buyer's sole cost, shall conduct and complete all inspections, investigations or tests, and review all information and reports deemed necessary by Buyer (collectively, the "Studies"), in order for Buyer to determine the suitability of the Property. Buyer, in Buyer's sole and absolute discretion, may through written notice to Seller, cancel this Contract during the Inspection Period and obtain a return of the Deposit.</p>
+<p><strong>6.2 Buyer's Continued Access to Property.</strong> From the Effective Date through COE, Seller grants access to the Property to Buyer and will make the Property reasonably available to Buyer and to Buyer's assignees, prospective assignees, agents, representatives, inspectors and authorized individuals to conduct walkthrough(s) of the Property.</p>
+<p><strong>6.3 Seller to Keep and Maintain Utility Service.</strong> Seller shall, at Seller's expense, have all utilities on until COE to allow Buyer to conduct Buyer's inspections and walkthroughs.</p>
+
+<h2>7. ESCROW; COE; CLOSING COSTS AND PRORATIONS.</h2>
+<p><strong>7.1 COE.</strong> Seller and Buyer engage Escrow Agent to act as the escrow agent for the closing of the transactions contemplated by this Contract. COE shall be deemed to occur on the date the Deed is recorded with the recorder of the county in which the Property is located.</p>
+<p><strong>7.2 Buyer's Closing Deliveries.</strong> The amount due at COE under Section 1.5 shall be paid to Seller by Buyer through escrow at the COE, together with: (7.2.1) Buyer's pro rata portion of all ad valorem real estate taxes; (7.2.2) An Affidavit of Property Value as required by Texas law; (7.2.3) All specific closing costs to be paid by Buyer as set forth in Section 1.11; and (7.2.4) All other documents Escrow Agent reasonably requests Buyer to execute.</p>
+<p><strong>7.3 Seller's Closing Deliveries.</strong> (7.3.1) Seller shall convey title to the Property by Special Warranty Deed ("Deed") at COE. (7.3.2) Seller shall execute an Affidavit of Property Value as required by Texas law. (7.3.3) Seller shall execute all documents marked in Sections 1.13 and 1.14 if not previously executed. (7.3.4) Seller shall execute all other documents Escrow Agent reasonably requests.</p>
+<p><strong>7.4 Tax Proration.</strong> Seller shall pay all real estate taxes encumbering the Property for the years prior to the year of COE. Taxes for the year of COE shall be prorated and paid by Seller and Buyer as of the COE.</p>
+<p><strong>7.5 Specific Closing Costs.</strong> Seller shall pay the specific closing costs applicable to Seller as set forth in Section 1.11.</p>
+<p><strong>7.6 Buyer Right to Proceed Without Escrow Agent.</strong> Buyer, at any time prior to COE, may elect to proceed with this transaction without utilizing the services of Escrow Agent. In such an event, Seller will be obligated to fully perform all terms and conditions of this Contract.</p>
+<p><strong>SELLER UNDERSTANDS, ACKNOWLEDGES AND AGREES THAT NOTWITHSTANDING THE FACT THAT SELLER MAY HAVE PAID A CLOSING FEE TO A LAW FIRM OF BUYER'S CHOOSING FOR THE PURPOSE OF CLOSING THIS TRANSACTION, THE LAW FIRM REPRESENTS THE BUYER ONLY AND DOES NOT REPRESENT SELLER IN THIS TRANSACTION.</strong></p>
+<p>Seller Initials ____________ &nbsp;&nbsp; Seller Initials ____________</p>
+
+<h2>8. REPRESENTATIONS AND WARRANTIES.</h2>
+<p><strong>8.1 Seller Representations and Warranties.</strong> Seller hereby represents, warrants and covenants that: (8.1.1) Seller has full right, power and authority to sell the Property to Buyer as provided in this Contract; (8.1.2) To Seller's actual knowledge, there are no leases that will be in effect as of COE, occupancy agreements, easements, licenses, or other agreements that grant third parties any possessory or usage rights to the Property; (8.1.3) Seller will maintain and repair the Property so that as of COE, it will be in substantially the same conditions as of the Effective Date; (8.1.4) Seller has disclosed to Buyer all material latent defects and any information concerning the Property known to Seller which materially and adversely affect the consideration to be paid by Buyer.</p>
+<p><strong>8.2 Buyer Representations and Warranties.</strong> Buyer warrants that Buyer has the full right, power and authority to enter into this Contract.</p>
+
+<h2>9. DEFAULT; REMEDIES.</h2>
+<p><strong>9.1 Cure Period.</strong> If a party fails to comply or perform under this Contract, the other party shall deliver a notice to the breaching party specifying the non-compliance (the "Cure Notice"). If the non-compliance is not cured within three (3) business days after receipt of the Cure Notice, the failure to comply shall become a breach of this Contract.</p>
+<p><strong>9.2 Default by Seller.</strong> If Seller shall breach any of the terms or provisions of this Contract prior to COE, Buyer may proceed against Seller for any claim or remedy the Buyer may have in law or equity, which includes, but is not limited to, specific performance and/or damages.</p>
+<p><strong>9.3 Default by Buyer.</strong> If Buyer breaches this Contract, Seller accepts the Deposit as Seller's sole right to damages.</p>
+<p><strong>9.4 Attorneys' Fees.</strong> In any lawsuit and arbitration proceeding involving Seller or Buyer arising or in any way relating to this Contract, the prevailing party shall be awarded its reasonable attorneys' fees and costs.</p>
+
+<h2>10. NO ORAL CHANGES OR REPRESENTATIONS.</h2>
+<p>EACH PARTY ACKNOWLEDGES THAT THIS CONTRACT SETS FORTH IN FULL THE ENTIRE CONTRACT BETWEEN THE PARTIES. This Contract may be amended or modified only by an agreement in writing signed by Buyer and Seller.</p>
+
+<h2>11. NOTICES.</h2>
+<p>Any and all notices, demands or requests required or permitted hereunder shall be in writing and shall be effective upon personal delivery, electronic mail, or upon receipt if deposited in the U.S. Mail, registered or certified, return receipt requested. To Seller: See Section 1.9. To Buyer: See Section 1.9. To Escrow Agent: See Section 1.7.</p>
+
+<h2>12. MISCELLANEOUS.</h2>
+<p><strong>12.1</strong> All Addendum, Provisions, Acknowledgements marked in Section 1.13 are deemed part of this Contract and are incorporated herein by this reference.</p>
+<p><strong>12.2 Assignment.</strong> Buyer may assign this Contract or any of its rights hereunder to any person, partnership, corporation or other entity and Seller's consent to such assignment is not necessary or required.</p>
+<p><strong>12.3 Successors and Assigns.</strong> This Contract shall be binding upon and inure to the benefit of the Parties hereto and their respective successors and assigns.</p>
+<p><strong>12.6 Time is of the Essence.</strong> Time is of the essence with respect to the performance of all terms, conditions and provisions of this Contract.</p>
+<p><strong>12.7 Choice of Law.</strong> This Contract shall be governed and enforced under the laws of the State of Texas. The sole venue for any action hereunder shall be in Texas.</p>
+<p><strong>12.9 Counterparts.</strong> This Contract may be executed in any number of counterparts. The parties may execute this Contract by electronic means and may deliver their signatures by facsimile transmission or .pdf e-mail delivery.</p>
+<p><strong>13.18 Voluntary Agreement.</strong> The Parties affirm, acknowledge and agree that they are entering into this Contract voluntarily and have not been threatened, coerced, intimidated, or in any way pressured into signing this Contract.</p>
+
+<p style="text-align:center;margin-top:24pt;">[SIGNATURE PAGE TO FOLLOW]</p>
+<p style="page-break-after:always;"></p>
+
+<!-- SIGNATURE PAGE -->
+<p>IN WITNESS WHEREOF, Buyer and Seller have executed this Contract as of the dates written below.</p>
+<table style="width:100%;border:1pt solid #000;">
+<tr>
+<td style="width:50%;padding:12pt;border-right:1pt solid #000;vertical-align:top;">
+<strong>APPROVED AND ACCEPTED BY SELLER</strong><br>
+on ___________________________:<br><br>
+<strong>SELLER:</strong><br><br>
+Name: <strong><u>${p.seller_1_name || '__________________________'}</u></strong><br><br>
+Signature: _________________________________<br><br>
+${p.seller_2_name ? `Name: <u>${p.seller_2_name}</u><br><br>Signature: _________________________________<br><br>` : ''}
+<strong>SELLER'S SPOUSE (if applicable):</strong><br>
+By signing below, Seller's spouse hereby consents to this Purchase Contract and all addendums thereto.<br><br>
+Printed Name: ______________________________<br><br>
+Date: ______________________________
+</td>
+<td style="width:50%;padding:12pt;vertical-align:top;">
+<strong>APPROVED AND ACCEPTED BY BUYER</strong><br>
+on ___________________________:<br><br>
+<strong>BUYER:</strong><br><br>
+${BUYER_FIXED.shortName}, a Wyoming limited liability company<br><br>
+Signature: _________________________________<br><br>
+By: <u>${BUYER_FIXED.signer}</u><br>
+Its: ${BUYER_FIXED.title}<br><br>
+Date: ______________________________
+</td>
+</tr>
+</table>
+
+${p.addendum_subject_to ? `
+<p style="page-break-before:always;"></p>
+<h1>SUBJECT TO ADDENDUM</h1>
+<p>Capitalized terms not expressly defined in this Addendum have the meanings given to them in the Contract.</p>
+<p>The Parties acknowledge and agree that Buyer is acquiring the Property subject to the Seller's existing loan(s) secured by one or more deeds of trust/mortgages against the Property (the "Existing Loan(s)"). This means that the Existing Loan(s) will not be paid off through Buyer's purchase of the Property. The Existing Loan(s) will remain outstanding and the deed(s) of trust/mortgages securing the Existing Loan(s) will remain as liens against the Property. Seller shall remain liable on the Existing Loan(s) and the Existing Loan(s) shall remain in Seller's name. The Parties also understand, acknowledge and agree that the deed(s) of trust/mortgages securing the Existing Loan(s) has/have a "Due on Sale" clause, which allows the lender(s) for the Existing Loan(s) to initiate a foreclosure proceeding for the Property due to the sale, transfer or conveyance of the Property from Seller to Buyer.</p>
+<p>Prior to COE, Seller shall execute the following documents: Authorization to Release Information, Notice of Change of Address, Escrow Letter, Limited Power of Attorney appointing Buyer as Seller's agent for the purpose of providing for and arranging insurance, making and accounting for mortgage payments, and an Assignment of Insurance Proceeds in favor of Buyer.</p>
+<h2>SELLER DISCLOSURES AND ACKNOWLEDGMENTS</h2>
+<p>_________ Seller Initials &nbsp;&nbsp; <strong>NO FURTHER OWNERSHIP OR CONTROL.</strong> Seller understands, acknowledges, and agrees that upon close of escrow, Seller will no longer own the Property and will have no further control over the Property.</p>
+<p>_________ Seller Initials &nbsp;&nbsp; <strong>EXISTING LOAN(S) NOT PAID IN FULL.</strong> Seller understands, acknowledges, and agrees that the Existing Loan(s) for which Seller is the borrower will not be paid in full as a result of this transaction. The existing loan may continue to remain on the Seller's credit report.</p>
+<p>_________ Seller Initials &nbsp;&nbsp; <strong>DUE ON SALE CLAUSE.</strong> Seller understands, acknowledges and agrees that the deed(s) of trust/mortgage(s) securing the Existing Loan(s) contain due on sale clauses, which allows the lender(s) to call the Existing Loan(s) due upon transfer of the Property by Seller to Buyer.</p>
+<p>_________ Seller Initials &nbsp;&nbsp; <strong>CONTINUING LIABILITY ON EXISTING LOAN(S).</strong> Seller understands, acknowledges, and agrees that no promises have been made by Buyer to Seller that the Existing Loan(s) will be paid off by Buyer through close of escrow and that upon the close of escrow and thereafter, Seller will remain liable on the Existing Loan(s).</p>
+<p>_________ Seller Initials &nbsp;&nbsp; <strong>WRAP-AROUND FINANCING TRANSACTION.</strong> This is a wraparound financing transaction, which means Buyer will pay the Existing Loan(s) according to the terms of the Existing Loan(s) and Seller may pursue foreclosure of the Property if Buyer fails to pay the Existing Loan(s).</p>
+<table style="width:100%;border:1pt solid #000;margin-top:24pt;">
+<tr>
+<td style="width:50%;padding:12pt;border-right:1pt solid #000;vertical-align:top;">
+<strong>APPROVED AND ACCEPTED BY SELLER:</strong><br>
+SELLER: <strong><u>${p.seller_1_name || '__________________________'}</u></strong><br><br>
+Signature: _________________________________<br>
+Date: _____________________________________<br><br>
+${p.seller_2_name ? `Signature: _________________________________<br>Date: _____________________________________<br><br>` : ''}
+</td>
+<td style="width:50%;padding:12pt;vertical-align:top;">
+<strong>APPROVED AND ACCEPTED BY BUYER:</strong><br>
+BUYER: ${BUYER_FIXED.shortName}, a Wyoming limited liability company<br><br>
+Authorized Signer: ${BUYER_FIXED.signer}<br>
+Signature: _________________________________<br>
+Date: _____________________________________
+</td>
+</tr>
+</table>
+` : ''}
+
+</body></html>`;
+}
+
+function generatePsaPdfContent(doc, p) {
+  const W = 612, M = 50, CW = W - 2 * M;
+  let y = 50;
+  const hexRgb = (h) => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
+  const [nr,ng,nb] = hexRgb(NAVY);
+
+  const text = (t, x, yy, opts = {}) => {
+    doc.setFont('helvetica', opts.bold ? 'bold' : 'normal');
+    doc.setFontSize(opts.size || 9);
+    doc.setTextColor(opts.color ? opts.color[0] : 0, opts.color ? opts.color[1] : 0, opts.color ? opts.color[2] : 0);
+    const lines = doc.splitTextToSize(t, opts.width || CW);
+    doc.text(lines, x, yy, opts.align ? { align: opts.align } : {});
+    return lines.length * (opts.size || 9) * 0.8 + 4;
+  };
+
+  const nl = (h = 8) => { y += h; };
+  const line = () => { doc.setDrawColor(200,200,200); doc.setLineWidth(0.5); doc.line(M, y, W-M, y); nl(6); };
+
+  // Title
+  y += text('PURCHASE CONTRACT AND ESCROW INSTRUCTIONS', W/2, y, { bold:true, size:13, color:[nr,ng,nb], align:'center' });
+  nl(4); line();
+
+  // Section 1 Header
+  y += text('1. BASIC TERMS', M, y, { bold:true, size:10, color:[nr,ng,nb] }); nl(4);
+
+  const row = (label, value) => {
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(nr,ng,nb);
+    doc.text(label, M, y);
+    doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+    const lines = doc.splitTextToSize(value || '___________________________', CW - 160);
+    doc.text(lines, M + 155, y);
+    y += Math.max(lines.length * 8, 10) + 4;
+    if (y > 720) { doc.addPage(); y = 50; }
+  };
+
+  const fullAddr = [p.property_address, p.city, p.state, p.zip].filter(Boolean).join(', ');
+  const coe = fmtCoeDate(p.coe_date);
+  const total = calcTotal(p);
+
+  row('1.1  Property Address:', fullAddr);
+  row('1.2  Property APN:', p.property_apn);
+  row('1.3  Legal Description:', p.legal_description);
+
+  nl(4);
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(nr,ng,nb);
+  doc.text('1.5  Purchase Price:', M, y); nl(8);
+
+  const prRows = [
+    [`$  ${fmtDollars(p.earnest_money) || '_________'}`, 'Earnest Money Deposit'],
+    [`$  ${fmtDollars(p.existing_1st_mortgage) || '_________'}`, 'Approx. Existing 1st Mortgage (Sub-To)'],
+    [`$  ${fmtDollars(p.cash_to_seller) || '_________'}`, `Cash to Seller at COE (${p.cash_to_seller_exact ? 'Exact' : 'Approximate'})`],
+    [`$  ${fmtDollars(p.agent_fee_cash) || '_________'}`, 'Cash at COE including Agent Fee'],
+    [`$  ${fmtDollars(total)}`, 'TOTAL PURCHASE PRICE'],
+  ];
+  prRows.forEach(([amt, label], i) => {
+    doc.setFont('helvetica', i === prRows.length-1 ? 'bold' : 'normal');
+    doc.setFontSize(9); doc.setTextColor(0,0,0);
+    doc.text(amt, M + 20, y);
+    doc.text(label, M + 120, y);
+    y += 10;
+  });
+
+  nl(4); row('1.6  Close of Escrow:', `${coe.month} ${coe.day}, ${coe.year}`);
+  row('1.7  Escrow Agent:', `${p.escrow_company || ''}${p.escrow_officer ? ' · ' + p.escrow_officer : ''}${p.escrow_phone ? ' · ' + p.escrow_phone : ''}`);
+  row('1.9  Seller:', `${p.seller_1_name || ''}${p.seller_2_name ? ' & ' + p.seller_2_name : ''} · ${p.seller_address || ''}`);
+  row('     Seller Phone/Email:', `${p.seller_1_phone || ''} ${p.seller_1_email || ''}`);
+  row('1.9  Buyer:', `${BUYER_FIXED.shortName} · ${BUYER_FIXED.signer}, ${BUYER_FIXED.title}`);
+  row('1.10 Inspection Period:', `${p.inspection_days || '15'} Business Days`);
+  row('1.13 Addendums:', [p.addendum_subject_to?'Subject To':'', p.addendum_post_closing?'Post-Closing Possession':'', p.addendum_seller_ack?'Seller Acknowledgments':''].filter(Boolean).join(', ') || 'None');
+  if (p.additional_terms) row('1.14 Additional Terms:', p.additional_terms);
+  if (p.occupancy_notes) row('1.15 Occupancy:', p.occupancy_notes);
+
+  nl(16);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(100,100,100);
+  doc.text('Seller Initials: ______/______', M, y);
+  doc.text('Buyer Initials: ______/______', W-M, y, { align:'right' });
+  nl(16);
+
+  // Signature block
+  if (y > 650) { doc.addPage(); y = 50; }
+  doc.setFillColor(248,248,248);
+  doc.rect(M, y, CW/2 - 5, 80, 'F');
+  doc.rect(M + CW/2 + 5, y, CW/2 - 5, 80, 'F');
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(nr,ng,nb);
+  doc.text('SELLER', M + 5, y + 14);
+  doc.text('BUYER', M + CW/2 + 10, y + 14);
+  doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
+  doc.text(p.seller_1_name || '________________________', M + 5, y + 28);
+  doc.text(`${BUYER_FIXED.shortName}`, M + CW/2 + 10, y + 28);
+  doc.text('Signature: ___________________', M + 5, y + 44);
+  doc.text(`By: ${BUYER_FIXED.signer}`, M + CW/2 + 10, y + 44);
+  doc.text('Date: _______________________', M + 5, y + 58);
+  doc.text(`Its: ${BUYER_FIXED.title}`, M + CW/2 + 10, y + 58);
+}
+
+// ============================================================
+// PSA FORM COMPONENT
+// ============================================================
+function PsaForm({ psa, setPsa }) {
+  const u = (f, v) => setPsa({ ...psa, [f]: v });
+  const cls = 'w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none';
+  const money = (field, placeholder) => (
+    <div className="relative">
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-semibold text-sm">$</span>
+      <input type="number" value={psa[field]||''} onChange={e=>u(field,e.target.value)} className={cls+' pl-7 font-semibold'} placeholder={placeholder}/>
+    </div>
+  );
+
+  return (
+    <div className="space-y-5">
+      {/* Property */}
+      <div>
+        <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-1.5"><MapPin size={14} style={{color:BURNT_ORANGE}}/>Property</h3>
+        <div className="space-y-3">
+          <FField label="Street Address *"><input type="text" value={psa.property_address} onChange={e=>u('property_address',e.target.value)} className={cls} placeholder="2004 Placerville St"/></FField>
+          <div className="grid grid-cols-3 gap-2">
+            <FField label="City"><input type="text" value={psa.city} onChange={e=>u('city',e.target.value)} className={cls} placeholder="Forney"/></FField>
+            <FField label="State"><input type="text" value={psa.state} onChange={e=>u('state',e.target.value)} className={cls} placeholder="TX" maxLength={2}/></FField>
+            <FField label="Zip"><input type="text" value={psa.zip} onChange={e=>u('zip',e.target.value)} className={cls} placeholder="75126"/></FField>
+          </div>
+          <FField label="Property APN"><input type="text" value={psa.property_apn} onChange={e=>u('property_apn',e.target.value)} className={cls} placeholder="00.3819.0002.0003.00"/></FField>
+          <FField label="Legal Description"><textarea value={psa.legal_description} onChange={e=>u('legal_description',e.target.value)} rows={2} className={cls+' resize-none'} placeholder="TRAVIS RANCH MARINA LOTS NO 2, BLOCK B, LOT 3"/></FField>
+        </div>
+      </div>
+
+      {/* Seller */}
+      <div>
+        <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-1.5"><User size={14} style={{color:BURNT_ORANGE}}/>Seller</h3>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <FField label="Seller 1 Name *"><input type="text" value={psa.seller_1_name} onChange={e=>u('seller_1_name',e.target.value)} className={cls} placeholder="Kevin Cossey"/></FField>
+            <FField label="Seller 2 Name (if applicable)"><input type="text" value={psa.seller_2_name} onChange={e=>u('seller_2_name',e.target.value)} className={cls} placeholder="Victoria Cossey"/></FField>
+          </div>
+          <FField label="Seller Address"><input type="text" value={psa.seller_address} onChange={e=>u('seller_address',e.target.value)} className={cls} placeholder="2004 Placerville St, Forney TX 75126"/></FField>
+          <div className="grid grid-cols-2 gap-3">
+            <FField label="Seller 1 Phone"><input type="tel" value={psa.seller_1_phone} onChange={e=>u('seller_1_phone',e.target.value)} className={cls} placeholder="512-993-4467"/></FField>
+            <FField label="Seller 2 Phone"><input type="tel" value={psa.seller_2_phone} onChange={e=>u('seller_2_phone',e.target.value)} className={cls} placeholder="903-799-8947"/></FField>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <FField label="Seller 1 Email"><input type="email" value={psa.seller_1_email} onChange={e=>u('seller_1_email',e.target.value)} className={cls} placeholder="seller@email.com"/></FField>
+            <FField label="Seller 2 Email"><input type="email" value={psa.seller_2_email} onChange={e=>u('seller_2_email',e.target.value)} className={cls} placeholder="seller2@email.com"/></FField>
+          </div>
+        </div>
+      </div>
+
+      {/* Purchase Price */}
+      <div>
+        <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-1.5"><DollarSign size={14} style={{color:BURNT_ORANGE}}/>Purchase Price</h3>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <FField label="Earnest Money Deposit">{money('earnest_money','150')}</FField>
+            <FField label="Existing 1st Mortgage (Sub-To)">{money('existing_1st_mortgage','383565')}</FField>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <FField label="Existing 2nd Mortgage (if any)">{money('existing_2nd_mortgage','')}</FField>
+            <FField label="Seller Carryback (if any)">{money('seller_carryback','')}</FField>
+          </div>
+          <div>
+            <FField label="Cash to Seller at COE">{money('cash_to_seller','13000')}</FField>
+            <div className="flex gap-4 mt-2">
+              <label className="flex items-center gap-1.5 cursor-pointer text-sm text-gray-700">
+                <input type="radio" checked={psa.cash_to_seller_exact} onChange={()=>u('cash_to_seller_exact',true)}/> Exact
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer text-sm text-gray-700">
+                <input type="radio" checked={!psa.cash_to_seller_exact} onChange={()=>u('cash_to_seller_exact',false)}/> Approximate
+              </label>
+            </div>
+          </div>
+          <div>
+            <FField label="Cash at COE incl. Agent Fee">{money('agent_fee_cash','17000')}</FField>
+            <div className="flex gap-4 mt-2">
+              <label className="flex items-center gap-1.5 cursor-pointer text-sm text-gray-700">
+                <input type="radio" checked={psa.agent_fee_approximate} onChange={()=>u('agent_fee_approximate',true)}/> Approximate
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer text-sm text-gray-700">
+                <input type="radio" checked={!psa.agent_fee_approximate} onChange={()=>u('agent_fee_approximate',false)}/> Exact
+              </label>
+            </div>
+          </div>
+          <FField label="Total Purchase Price (auto-calculated if blank)">
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-semibold text-sm">$</span>
+              <input type="number" value={psa.total_price||''} onChange={e=>u('total_price',e.target.value)} className={cls+' pl-7 font-bold'} placeholder={calcTotal(psa).toLocaleString()}/>
+            </div>
+          </FField>
+        </div>
+      </div>
+
+      {/* Closing */}
+      <div>
+        <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-1.5"><Calendar size={14} style={{color:BURNT_ORANGE}}/>Closing</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <FField label="Close of Escrow Date"><input type="date" value={psa.coe_date} onChange={e=>u('coe_date',e.target.value)} className={cls}/></FField>
+          <FField label="Inspection Period (business days)"><input type="number" value={psa.inspection_days} onChange={e=>u('inspection_days',e.target.value)} className={cls} placeholder="15"/></FField>
+        </div>
+      </div>
+
+      {/* Escrow */}
+      <div>
+        <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-1.5"><Building size={14} style={{color:BURNT_ORANGE}}/>Escrow Agent</h3>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <FField label="Escrow Company"><input type="text" value={psa.escrow_company} onChange={e=>u('escrow_company',e.target.value)} className={cls} placeholder="Closed Title"/></FField>
+            <FField label="Escrow Officer"><input type="text" value={psa.escrow_officer} onChange={e=>u('escrow_officer',e.target.value)} className={cls} placeholder="Adrienne Prince"/></FField>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <FField label="Escrow Phone"><input type="tel" value={psa.escrow_phone} onChange={e=>u('escrow_phone',e.target.value)} className={cls} placeholder="910-222-3931"/></FField>
+            <FField label="Escrow Email"><input type="email" value={psa.escrow_email} onChange={e=>u('escrow_email',e.target.value)} className={cls} placeholder="officer@escrow.com"/></FField>
+          </div>
+        </div>
+      </div>
+
+      {/* Addendums */}
+      <div>
+        <h3 className="text-sm font-bold text-gray-900 mb-3">Addendums</h3>
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={psa.addendum_subject_to} onChange={e=>u('addendum_subject_to',e.target.checked)} className="w-4 h-4"/><span className="text-sm text-gray-700">Subject To Addendum</span></label>
+          <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={psa.addendum_post_closing} onChange={e=>u('addendum_post_closing',e.target.checked)} className="w-4 h-4"/><span className="text-sm text-gray-700">Post-Closing Possession Addendum</span></label>
+          <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={psa.addendum_seller_ack} onChange={e=>u('addendum_seller_ack',e.target.checked)} className="w-4 h-4"/><span className="text-sm text-gray-700">Seller Acknowledgements</span></label>
+        </div>
+      </div>
+
+      {/* Occupancy */}
+      <div>
+        <h3 className="text-sm font-bold text-gray-900 mb-3">Occupancy</h3>
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={psa.occupancy_seller} onChange={()=>u('occupancy_seller',true)} className="w-4 h-4"/><span className="text-sm text-gray-700">Seller occupied — Buyer gets possession at COE</span></label>
+          <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={!psa.occupancy_seller} onChange={()=>u('occupancy_seller',false)} className="w-4 h-4"/><span className="text-sm text-gray-700">Property is leased</span></label>
+          <FField label="Occupancy Notes (optional)"><input type="text" value={psa.occupancy_notes} onChange={e=>u('occupancy_notes',e.target.value)} className={cls} placeholder="Buyer agrees to lease property back to Seller until end of June, 2026"/></FField>
+        </div>
+      </div>
+
+      {/* Additional Terms */}
+      <FField label="Additional Terms (Section 1.14)">
+        <textarea value={psa.additional_terms} onChange={e=>u('additional_terms',e.target.value)} rows={3} className={cls+' resize-none'} placeholder="Any special conditions or terms..."/>
+      </FField>
+
+      {/* Buyer — locked */}
+      <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+        <p className="text-xs font-bold text-gray-500 uppercase mb-2">Buyer (Pre-filled — always QP Holdings)</p>
+        <p className="text-sm text-gray-700 font-semibold">QP Holdings, LLC · Wyoming LLC</p>
+        <p className="text-sm text-gray-600">30 N Gould St. Ste: R, Sheridan, WY 82801</p>
+        <p className="text-sm text-gray-600">214-702-6883 · Authorized Signer: Michael Harry</p>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// PSA PREVIEW COMPONENT
+// ============================================================
+function PsaPreview({ psa }) {
+  const coe = fmtCoeDate(psa.coe_date);
+  const total = calcTotal(psa);
+  const fullAddr = [psa.property_address, psa.city, psa.state, psa.zip].filter(Boolean).join(', ');
+  const checkBox = (checked) => checked ? '☒' : '☐';
+
+  const row = (label, val) => (
+    <tr>
+      <td style={{ width: 140, fontWeight: 'bold', paddingRight: 8, verticalAlign: 'top', color: NAVY, fontSize: '9pt', paddingTop: 6 }}>{label}</td>
+      <td style={{ fontSize: '9pt', paddingTop: 6, borderBottom: '0.5pt solid #e5e7eb' }}>{val || <span style={{ color: '#9ca3af' }}>—</span>}</td>
+    </tr>
+  );
+
+  return (
+    <div style={{ fontFamily: 'Arial, sans-serif', fontSize: '9pt' }}>
+      <h2 style={{ textAlign: 'center', color: NAVY, fontSize: '13pt', marginBottom: 4 }}>PURCHASE CONTRACT AND ESCROW INSTRUCTIONS</h2>
+      <p style={{ textAlign: 'center', fontSize: '8pt', color: '#6b7280', marginBottom: 12 }}>QP Holdings, LLC · Wholesale Purchase</p>
+      <hr style={{ border: 'none', borderTop: `2pt solid ${GOLD}`, marginBottom: 12 }} />
+
+      <p style={{ fontWeight: 'bold', color: NAVY, marginBottom: 8 }}>1. BASIC TERMS</p>
+
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <tbody>
+          {row('1.1 Property:', fullAddr || '—')}
+          {row('1.2 APN:', psa.property_apn)}
+          {row('1.3 Legal Desc:', psa.legal_description)}
+          <tr><td colSpan={2} style={{ paddingTop: 10, paddingBottom: 4, fontWeight: 'bold', color: NAVY, fontSize: '9pt' }}>1.5 Purchase Price:</td></tr>
+          <tr><td style={{ paddingLeft: 16, fontSize: '9pt', color: '#374151' }}>Earnest Money:</td><td style={{ fontSize: '9pt' }}>${psa.earnest_money ? parseFloat(psa.earnest_money).toLocaleString() : '—'}</td></tr>
+          <tr><td style={{ paddingLeft: 16, fontSize: '9pt', color: '#374151' }}>Existing 1st Mtg (Sub-To):</td><td style={{ fontSize: '9pt' }}>{psa.existing_1st_mortgage ? '$' + parseFloat(psa.existing_1st_mortgage).toLocaleString() : '—'}</td></tr>
+          {psa.existing_2nd_mortgage && <tr><td style={{ paddingLeft: 16, fontSize: '9pt', color: '#374151' }}>Existing 2nd Mtg:</td><td style={{ fontSize: '9pt' }}>${parseFloat(psa.existing_2nd_mortgage).toLocaleString()}</td></tr>}
+          {psa.cash_to_seller && <tr><td style={{ paddingLeft: 16, fontSize: '9pt', color: '#374151' }}>Cash to Seller at COE:</td><td style={{ fontSize: '9pt' }}>${parseFloat(psa.cash_to_seller).toLocaleString()} ({psa.cash_to_seller_exact ? 'Exact' : 'Approx.'})</td></tr>}
+          {psa.agent_fee_cash && <tr><td style={{ paddingLeft: 16, fontSize: '9pt', color: '#374151' }}>Cash incl. Agent Fee:</td><td style={{ fontSize: '9pt' }}>${parseFloat(psa.agent_fee_cash).toLocaleString()} ({psa.agent_fee_approximate ? 'Approx.' : 'Exact'})</td></tr>}
+          <tr><td style={{ paddingLeft: 16, fontSize: '9pt', fontWeight: 'bold', color: NAVY }}>TOTAL PURCHASE PRICE:</td><td style={{ fontSize: '9pt', fontWeight: 'bold', color: NAVY }}>${total.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td></tr>
+          {row('1.6 COE Date:', psa.coe_date ? `${coe.month} ${coe.day}, ${coe.year}` : '')}
+          {row('1.7 Escrow Agent:', [psa.escrow_company, psa.escrow_officer].filter(Boolean).join(' · '))}
+          {psa.escrow_phone && row('    Escrow Phone/Email:', [psa.escrow_phone, psa.escrow_email].filter(Boolean).join(' · '))}
+          {row('1.9 Seller:', [psa.seller_1_name, psa.seller_2_name].filter(Boolean).join(' & '))}
+          {row('    Seller Address:', psa.seller_address)}
+          {row('    Seller Phone:', [psa.seller_1_phone, psa.seller_2_phone].filter(Boolean).join(' · '))}
+          {row('    Seller Email:', [psa.seller_1_email, psa.seller_2_email].filter(Boolean).join(' · '))}
+          {row('1.9 Buyer:', 'QP Holdings, LLC · Wyoming LLC · Michael Harry')}
+          {row('1.10 Inspection:', `${psa.inspection_days || 15} Business Days`)}
+          {row('1.13 Addendums:', [psa.addendum_subject_to && 'Subject To', psa.addendum_post_closing && 'Post-Closing Possession', psa.addendum_seller_ack && 'Seller Ack'].filter(Boolean).join(', '))}
+          {psa.additional_terms && row('1.14 Add. Terms:', psa.additional_terms)}
+          {psa.occupancy_notes && row('1.15 Occupancy:', psa.occupancy_notes)}
+        </tbody>
+      </table>
+
+      <div style={{ marginTop: 16, background: '#f8f5ee', padding: '10pt', borderRadius: 6, border: `1pt solid ${GOLD}` }}>
+        <p style={{ fontSize: '8pt', color: '#6b7280', margin: 0 }}><strong>Buyer (Pre-filled):</strong> QP Holdings, LLC, a Wyoming limited liability company · 30 N Gould St. Ste: R, Sheridan, WY 82801 · 214-702-6883 · Authorized Signer: Michael Harry</p>
+      </div>
     </div>
   );
 }
