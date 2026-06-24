@@ -6,7 +6,9 @@ import {
   AlertCircle, CheckCircle2, ClipboardList, X, Edit3, MapPin,
   Calendar, User, FileText, Trash2, FileSignature, Settings,
   Download, Eye, Users, UserCheck, BarChart3, Upload, File,
-  Image, ChevronDown, Phone, Mail, Building, Home, ScrollText
+  Image, ChevronDown, Phone, Mail, Building, Home, ScrollText,
+  Sun, Clock, Target, Flame, ChevronLeft, ChevronRight, Timer,
+  Zap, PhoneCall, CheckSquare
 } from 'lucide-react';
 
 const SUPABASE_URL = 'https://hhpaxztybnhtflstjfqo.supabase.co';
@@ -99,6 +101,8 @@ export default function IronbridgeApp() {
   const [newBuyer, setNewBuyer] = useState(blankBuyer());
   const [showNewBuyer, setShowNewBuyer] = useState(false);
   const [savingBuyer, setSavingBuyer] = useState(false);
+  const [buyerCityFilter, setBuyerCityFilter] = useState('');
+  const [buyerTypeFilter, setBuyerTypeFilter] = useState('all');
 
   // LOI
   const [loiForm, setLoiForm] = useState(blankLoi());
@@ -109,6 +113,31 @@ export default function IronbridgeApp() {
   const [psaForm, setPsaForm] = useState(blankPsa());
   const [psaBusy, setPsaBusy] = useState(false);
   const [psaMsg, setPsaMsg] = useState('');
+
+  // Calendar
+  const [calEvents, setCalEvents] = useState([]);
+  const [calDate, setCalDate] = useState(new Date());
+  const [calView, setCalView] = useState('week');
+  const [showNewEvent, setShowNewEvent] = useState(false);
+  const [newEvent, setNewEvent] = useState(blankEvent());
+  const [editingEvent, setEditingEvent] = useState(null);
+  const [savingEvent, setSavingEvent] = useState(false);
+
+  // Win the Day
+  const [allLogs, setAllLogs] = useState([]);
+  const [todayLog, setTodayLog] = useState(null);
+  const [logOffers, setLogOffers] = useState('');
+  const [logConvos, setLogConvos] = useState('');
+  const [logContacts, setLogContacts] = useState('');
+  const [logSaving, setLogSaving] = useState(false);
+  const [logMsg, setLogMsg] = useState('');
+
+  // Contract upload gate
+  const [contractModal, setContractModal] = useState(null); // { file, dealId }
+  const [contractExecDate, setContractExecDate] = useState('');
+  const [contractDays, setContractDays] = useState('15');
+  const [contractDayType, setContractDayType] = useState('business');
+  const [contractSaving, setContractSaving] = useState(false);
 
   // Profile
   const [profilePhone, setProfilePhone] = useState('');
@@ -147,7 +176,19 @@ export default function IronbridgeApp() {
   }
 
   function blankBuyer() {
-    return { name: '', company: '', email: '', phone: '', type: 'daisy_chain', buy_box_min: '', buy_box_max: '', buy_box_areas: '', notes: '', active: true };
+    return {
+      name: '', company: '', email: '', phone: '',
+      type: 'daisy_chain',
+      buy_box_min: '', buy_box_max: '',
+      buy_box_areas: '',
+      buy_box_cities: '',
+      buy_box_property_types: '',
+      buy_box_deal_types: '',
+      buy_box_condition: '',
+      buy_box_max_repairs: '',
+      buy_box_timeline_days: '',
+      notes: '', active: true,
+    };
   }
 
   function blankLoi() {
@@ -156,6 +197,15 @@ export default function IronbridgeApp() {
       offer_date: new Date().toISOString().split('T')[0],
       property_address: '', city: '', state: 'TX', zip: '', seller_name: '',
       cash_offer: '', include_subto: true, due_diligence_days: 10, closing_days: 15,
+      cash_to_seller: '',
+    };
+  }
+
+  function blankEvent() {
+    return {
+      title: '', type: 'call', date: new Date().toISOString().split('T')[0],
+      start_time: '', end_time: '', deal_id: '', agent_name: '',
+      agent_phone: '', location: '', notes: '',
     };
   }
 
@@ -251,14 +301,26 @@ export default function IronbridgeApp() {
     if (!accessToken) return;
     setLoadingDeals(true); setDataError('');
     try {
-      const [d, a, b] = await Promise.all([
+      const [d, a, b, ev, logs] = await Promise.all([
         supa('/rest/v1/deals?select=*,profiles(full_name,email)&order=created_at.desc'),
         supa('/rest/v1/agents?select=*&order=name.asc'),
         supa('/rest/v1/buyers?select=*&order=name.asc'),
+        supa('/rest/v1/calendar_events?select=*,profiles(full_name,email)&order=date.asc,start_time.asc'),
+        supa('/rest/v1/daily_logs?select=*,profiles(full_name,email)&order=log_date.desc&limit=60'),
       ]);
       setDeals(d || []);
       setAgents(a || []);
       setBuyers(b || []);
+      setCalEvents(ev || []);
+      setAllLogs(logs || []);
+      const today = new Date().toISOString().split('T')[0];
+      const mine = (logs || []).find(l => l.log_date === today && l.user_id === user?.id);
+      setTodayLog(mine || null);
+      if (mine) {
+        setLogOffers(String(mine.offers_made + mine.lois_sent));
+        setLogConvos(String(mine.new_convos || 0));
+        setLogContacts(String(mine.new_contacts || 0));
+      }
     } catch (err) { setDataError(err.message); }
     finally { setLoadingDeals(false); }
   };
@@ -300,6 +362,17 @@ export default function IronbridgeApp() {
   const handleFileUpload = async (e, dealId, docType) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
+    if (e.target) e.target.value = '';
+
+    // CONTRACT GATE — intercept and show mandatory modal
+    if (docType === 'contract') {
+      setContractModal({ file: files[0], dealId });
+      setContractExecDate(new Date().toISOString().split('T')[0]);
+      setContractDays('15');
+      setContractDayType('business');
+      return;
+    }
+
     setUploading(true); setUploadMsg('');
     try {
       for (const file of files) {
@@ -308,13 +381,8 @@ export default function IronbridgeApp() {
           method: 'POST',
           headers: { 'Prefer': 'return=minimal' },
           body: JSON.stringify({
-            deal_id: dealId,
-            uploaded_by: user.id,
-            name: file.name,
-            type: docType,
-            storage_path: path,
-            file_type: file.type,
-            file_size: file.size,
+            deal_id: dealId, uploaded_by: user.id, name: file.name,
+            type: docType, storage_path: path, file_type: file.type, file_size: file.size,
           }),
         });
       }
@@ -322,7 +390,7 @@ export default function IronbridgeApp() {
       await loadDealDocs(dealId);
       setTimeout(() => setUploadMsg(''), 3000);
     } catch (err) { setUploadMsg(`Error: ${err.message}`); }
-    finally { setUploading(false); if (fileRef.current) fileRef.current.value = ''; }
+    finally { setUploading(false); }
   };
 
   const openDoc = async (doc) => {
@@ -343,6 +411,346 @@ export default function IronbridgeApp() {
   };
 
   // ── Deal CRUD ──
+  // ── Business day calculator ──
+  const addBusinessDays = (date, days) => {
+    const result = new Date(date + 'T00:00:00');
+    let added = 0;
+    while (added < days) {
+      result.setDate(result.getDate() + 1);
+      const dow = result.getDay();
+      if (dow !== 0 && dow !== 6) added++;
+    }
+    return result;
+  };
+
+  const addCalendarDays = (date, days) => {
+    const result = new Date(date + 'T00:00:00');
+    result.setDate(result.getDate() + parseInt(days));
+    return result;
+  };
+
+  const calcOptionExpiration = (execDate, days, dayType) => {
+    const d = dayType === 'business' ? addBusinessDays(execDate, parseInt(days)) : addCalendarDays(execDate, days);
+    return d.toISOString().split('T')[0];
+  };
+
+  // ── Option expiration alerts ──
+  const getOptionAlerts = () => {
+    const now = new Date();
+    const alerts = [];
+    deals.forEach(d => {
+      if (!d.option_period_expiration || d.status === 'dead' || d.status === 'closed') return;
+      const exp = new Date(d.option_period_expiration + 'T23:59:59');
+      const hoursUntil = (exp - now) / 3600000;
+      if (hoursUntil < 0) {
+        alerts.push({ deal: d, type: 'expired', label: '🔴 Option EXPIRED', urgent: true });
+      } else if (hoursUntil <= 24) {
+        alerts.push({ deal: d, type: '24hr', label: '🔴 Option expires in < 24 hours', urgent: true });
+      } else if (hoursUntil <= 48) {
+        alerts.push({ deal: d, type: '48hr', label: '🟡 Option expires in < 48 hours', urgent: false });
+      }
+    });
+    return alerts;
+  };
+
+  // ── Contract upload with gate ──
+  const handleContractSave = async () => {
+    if (!contractExecDate || !contractDays) return;
+    setContractSaving(true);
+    try {
+      const { file, dealId } = contractModal;
+      // Upload file
+      const ext = file.name.split('.').pop();
+      const path = `${dealId}/contract/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const upRes = await fetch(`${SUPABASE_URL}/storage/v1/object/offer-documents/${path}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${accessToken}`, 'apikey': SUPABASE_ANON_KEY, 'Content-Type': file.type, 'x-upsert': 'true' },
+        body: file,
+      });
+      if (!upRes.ok) throw new Error('Upload failed');
+
+      // Save document record
+      await supa('/rest/v1/documents', {
+        method: 'POST',
+        headers: { 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ deal_id: dealId, uploaded_by: user.id, name: file.name, type: 'contract', storage_path: path, file_type: file.type, file_size: file.size }),
+      });
+
+      // Calculate option expiration
+      const optionExp = calcOptionExpiration(contractExecDate, contractDays, contractDayType);
+
+      // Update deal
+      await supa(`/rest/v1/deals?id=eq.${dealId}`, {
+        method: 'PATCH',
+        headers: { 'Prefer': 'return=minimal' },
+        body: JSON.stringify({
+          execution_date: contractExecDate,
+          option_period_days: parseInt(contractDays),
+          option_day_type: contractDayType,
+          option_period_expiration: optionExp,
+          contract_uploaded: true,
+          updated_at: new Date().toISOString(),
+        }),
+      });
+
+      // Auto-create calendar alert for option expiration
+      const dealInfo = deals.find(d => d.id === dealId);
+      await supa('/rest/v1/calendar_events', {
+        method: 'POST',
+        headers: { 'Prefer': 'return=minimal' },
+        body: JSON.stringify({
+          user_id: user.id,
+          title: `⚠️ Option Expires: ${dealInfo?.property_address || 'Deal'}`,
+          type: 'deal_deadline',
+          date: optionExp,
+          deal_id: dealId,
+          notes: `${contractDays} ${contractDayType} days from execution date ${contractExecDate}`,
+          is_auto: true,
+        }),
+      });
+
+      setContractModal(null);
+      setContractExecDate('');
+      setContractDays('15');
+      setContractDayType('business');
+      await loadAll();
+      if (dealId === selectedDeal?.id) await loadDealDocs(dealId);
+      setUploadMsg('✅ Contract uploaded · Option expiration set to ' + new Date(optionExp + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }));
+      setTimeout(() => setUploadMsg(''), 5000);
+    } catch (err) { alert(`Error: ${err.message}`); }
+    finally { setContractSaving(false); }
+  };
+
+  // ── Goals ──
+  const GENO_GOAL = 5;         // offers per day
+  const GENO_BUYER_GOAL = 10;  // buyers added per week
+  const MIKE_CONVO_GOAL = 5;   // new agent conversations per day
+  const MIKE_CONTACT_GOAL = 5; // new contacts added from Mojo per day
+
+  // ── Calendar CRUD ──
+  const EVENT_TYPES = [
+    { value: 'call', label: 'Call / Follow-Up', icon: '📞', color: TEAL },
+    { value: 'appointment', label: 'Appointment', icon: '📅', color: BURNT_ORANGE },
+    { value: 'meeting', label: 'Meeting', icon: '🤝', color: '#6366f1' },
+    { value: 'showing', label: 'Showing / Walkthrough', icon: '🏡', color: '#10b981' },
+    { value: 'busy', label: 'Busy Block', icon: '🔲', color: '#6b7280' },
+    { value: 'deal_deadline', label: 'Deal Deadline', icon: '⚠️', color: '#ef4444' },
+  ];
+  const getEventMeta = (type) => EVENT_TYPES.find(t => t.value === type) || EVENT_TYPES[0];
+
+  const saveEvent = async (isNew) => {
+    setSavingEvent(true);
+    try {
+      const data = isNew ? newEvent : editingEvent;
+      const payload = {
+        title: data.title,
+        type: data.type,
+        date: data.date,
+        start_time: data.start_time || null,
+        end_time: data.end_time || null,
+        deal_id: data.deal_id || null,
+        agent_name: data.agent_name || null,
+        agent_phone: data.agent_phone || null,
+        location: data.location || null,
+        notes: data.notes || null,
+      };
+      if (isNew) {
+        await supa('/rest/v1/calendar_events', {
+          method: 'POST',
+          headers: { 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ ...payload, user_id: user.id }),
+        });
+        setNewEvent(blankEvent());
+        setShowNewEvent(false);
+      } else {
+        await supa(`/rest/v1/calendar_events?id=eq.${editingEvent.id}`, {
+          method: 'PATCH',
+          headers: { 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ ...payload, updated_at: new Date().toISOString() }),
+        });
+        setEditingEvent(null);
+      }
+      await loadAll();
+    } catch (err) { alert(err.message); }
+    finally { setSavingEvent(false); }
+  };
+
+  const deleteEvent = async () => {
+    if (!editingEvent || !confirm('Delete this event?')) return;
+    try {
+      await supa(`/rest/v1/calendar_events?id=eq.${editingEvent.id}`, { method: 'DELETE' });
+      setEditingEvent(null);
+      await loadAll();
+    } catch (err) { alert(err.message); }
+  };
+
+  // ── Daily Log CRUD ──
+  const isGeno = (u) => u?.email === 'eugenemcneil20@gmail.com';
+
+  const saveLog = async () => {
+    setLogSaving(true); setLogMsg('');
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const geno = isGeno(user);
+      const totalOffers = parseInt(logOffers) || 0;
+      const totalConvos = parseInt(logConvos) || 0;
+      const totalContacts = parseInt(logContacts) || 0;
+      const goalHit = geno
+        ? totalOffers >= GENO_GOAL
+        : totalConvos >= MIKE_CONVO_GOAL && totalContacts >= MIKE_CONTACT_GOAL;
+
+      const payload = {
+        user_id: user.id,
+        log_date: today,
+        offers_made: geno ? totalOffers : 0,
+        lois_sent: 0,
+        call_minutes: 0,
+        new_convos: geno ? 0 : totalConvos,
+        new_contacts: geno ? 0 : totalContacts,
+        goal_hit: goalHit,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (todayLog) {
+        await supa(`/rest/v1/daily_logs?id=eq.${todayLog.id}`, {
+          method: 'PATCH',
+          headers: { 'Prefer': 'return=minimal' },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await supa('/rest/v1/daily_logs', {
+          method: 'POST',
+          headers: { 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ ...payload, created_at: new Date().toISOString() }),
+        });
+      }
+      setLogMsg(goalHit ? '🔥 Goal hit! Saved.' : '✅ Saved');
+      setTimeout(() => setLogMsg(''), 2500);
+      await loadAll();
+    } catch (err) { setLogMsg(`Error: ${err.message}`); }
+    finally { setLogSaving(false); }
+  };
+
+  // ── Calendar helpers ──
+  const getWeekDays = (anchor) => {
+    const d = new Date(anchor);
+    const day = d.getDay();
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+    return Array.from({ length: 7 }, (_, i) => {
+      const x = new Date(monday);
+      x.setDate(monday.getDate() + i);
+      return x;
+    });
+  };
+
+  const getMonthDays = (anchor) => {
+    const year = anchor.getFullYear();
+    const month = anchor.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startOffset = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
+    const days = [];
+    for (let i = -startOffset; i <= lastDay.getDate() - 1; i++) {
+      const d = new Date(year, month, 1 + i);
+      days.push(d);
+    }
+    while (days.length % 7 !== 0) {
+      const last = days[days.length - 1];
+      const next = new Date(last);
+      next.setDate(last.getDate() + 1);
+      days.push(next);
+    }
+    return days;
+  };
+
+  const eventsOnDay = (date) => {
+    const iso = date.toISOString().split('T')[0];
+    const manual = calEvents.filter(e => e.date === iso);
+    // Auto deal deadlines
+    const auto = [];
+    deals.forEach(d => {
+      if (d.option_period_expiration === iso) auto.push({ id: `opt-${d.id}`, title: `⚠️ Option Expires: ${d.property_address}`, type: 'deal_deadline', date: iso, is_auto: true, profiles: d.profiles });
+      if (d.closing_date === iso) auto.push({ id: `cls-${d.id}`, title: `🏠 Closing: ${d.property_address}`, type: 'deal_deadline', date: iso, is_auto: true, profiles: d.profiles });
+      if (d.contract_date === iso) auto.push({ id: `ctr-${d.id}`, title: `📋 Contract Date: ${d.property_address}`, type: 'deal_deadline', date: iso, is_auto: true, profiles: d.profiles });
+    });
+    return [...auto, ...manual];
+  };
+
+  const getUserColor = (event) => {
+    const uid = event.user_id;
+    if (!uid) return '#ef4444';
+    const geno = allLogs.find(l => l.user_id === uid);
+    const isGenoUser = event.profiles?.email === 'eugenemcneil20@gmail.com';
+    return isGenoUser ? NAVY : TEAL;
+  };
+
+  // Streak calculation
+  // ── Buyer helpers ──
+  const getWeekStart = () => {
+    const d = new Date();
+    d.setHours(0,0,0,0);
+    const day = d.getDay();
+    d.setDate(d.getDate() - (day === 0 ? 6 : day - 1)); // Monday
+    return d;
+  };
+
+  const buyersAddedThisWeek = (uid) => {
+    const weekStart = getWeekStart();
+    return buyers.filter(b => b.created_by === uid && new Date(b.created_at) >= weekStart).length;
+  };
+
+  const getAllBuyerCities = () => {
+    const cities = new Set();
+    buyers.forEach(b => {
+      const cityStr = b.buy_box_cities || b.buy_box_areas || '';
+      cityStr.split(/[,·\n]/).map(c => c.trim()).filter(Boolean).forEach(c => cities.add(c));
+    });
+    return Array.from(cities).sort();
+  };
+
+  const filteredBuyers = () => {
+    let list = buyers;
+    if (buyerTypeFilter !== 'all') list = list.filter(b => b.type === buyerTypeFilter);
+    if (buyerCityFilter) {
+      list = list.filter(b => {
+        const cityStr = (b.buy_box_cities || b.buy_box_areas || '').toLowerCase();
+        return cityStr.includes(buyerCityFilter.toLowerCase());
+      });
+    }
+    return list;
+  };
+
+  const calcStreak = (uid) => {    const myLogs = allLogs.filter(l => l.user_id === uid && l.goal_hit).map(l => l.log_date).sort().reverse();
+    if (!myLogs.length) return 0;
+    let streak = 0;
+    let check = new Date();
+    check.setHours(0,0,0,0);
+    for (const dateStr of myLogs) {
+      const logD = new Date(dateStr + 'T00:00:00');
+      const diff = Math.floor((check - logD) / 86400000);
+      if (diff > 1) break;
+      streak++;
+      check = logD;
+    }
+    return streak;
+  };
+
+  // Week productivity grid
+  const getWeekGrid = (uid) => {
+    const days = ['M','T','W','T','F'];
+    const now = new Date();
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - (now.getDay() === 0 ? 6 : now.getDay() - 1));
+    return days.map((label, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      const iso = d.toISOString().split('T')[0];
+      const log = allLogs.find(l => l.log_date === iso && l.user_id === uid);
+      return { label, iso, hit: log?.goal_hit || false, future: d > now };
+    });
+  };
+
   const saveAgentFromDeal = async (deal) => {
     if (!deal.agent_email && !deal.agent_name) return null;
     try {
@@ -476,7 +884,20 @@ export default function IronbridgeApp() {
     setSavingBuyer(true);
     try {
       const data = isNew ? newBuyer : editingBuyer;
-      const payload = { ...data, buy_box_min: data.buy_box_min ? parseFloat(data.buy_box_min) : null, buy_box_max: data.buy_box_max ? parseFloat(data.buy_box_max) : null };
+      const payload = {
+        name: data.name, company: data.company || null, email: data.email || null,
+        phone: data.phone || null, type: data.type || 'daisy_chain',
+        buy_box_min: data.buy_box_min ? parseFloat(data.buy_box_min) : null,
+        buy_box_max: data.buy_box_max ? parseFloat(data.buy_box_max) : null,
+        buy_box_areas: data.buy_box_areas || null,
+        buy_box_cities: data.buy_box_cities || null,
+        buy_box_property_types: data.buy_box_property_types || null,
+        buy_box_deal_types: data.buy_box_deal_types || null,
+        buy_box_condition: data.buy_box_condition || null,
+        buy_box_max_repairs: data.buy_box_max_repairs ? parseFloat(data.buy_box_max_repairs) : null,
+        buy_box_timeline_days: data.buy_box_timeline_days ? parseInt(data.buy_box_timeline_days) : null,
+        notes: data.notes || null, active: data.active,
+      };
       if (isNew) {
         await supa('/rest/v1/buyers', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify({ ...payload, created_by: user.id }) });
         setNewBuyer(blankBuyer()); setShowNewBuyer(false);
@@ -650,11 +1071,14 @@ export default function IronbridgeApp() {
     if (data.include_subto) {
       y+=8; doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(nr,ng,nb); doc.text('OPTION 2 — SUBJECT-TO EXISTING MORTGAGE', M, y);
       y+=15; doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(0,0,0);
-      ['Purchase Price: Subject-to existing mortgage · $0 cash to Seller','Seller leaves loan; Buyer assumes payments','Listing Agent Fee: 1% paid by Buyer · Buyer pays closing costs','Due Diligence: 15 business days · Closing: On or before 60 days','As-Is · Buyer\'s choice of Escrow · Vesting determined during Escrow','Buyer responsible for taxes, insurance, all payments after COE'].forEach(b=>{const bl=doc.splitTextToSize(b,CW-20);doc.text('•',M+5,y);doc.text(bl,M+15,y);y+=bl.length*13;});
+      ['Purchase Price: Subject-to existing mortgage · ' + (data.cash_to_seller ? `$${parseFloat(data.cash_to_seller).toLocaleString()}` : '$0') + ' cash to Seller at COE','Seller leaves loan; Buyer assumes payments','Listing Agent Fee: 1% paid by Buyer · Buyer pays closing costs','Due Diligence: 15 business days · Closing: On or before 60 days','As-Is · Buyer\'s choice of Escrow · Vesting determined during Escrow','Buyer responsible for taxes, insurance, all payments after COE'].forEach(b=>{const bl=doc.splitTextToSize(b,CW-20);doc.text('•',M+5,y);doc.text(bl,M+15,y);y+=bl.length*13;});
     }
     y+=8; doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('Summary:', M, y);
     doc.setFont('helvetica','normal');
-    const sum = data.include_subto?'Cash = fast certain close. Sub-To = $0 obligation for seller, we take full responsibility + pay your commission. Happy to discuss.':'Cash provides a fast certain close. Happy to discuss further.';
+    const cashToSellerSummary = data.cash_to_seller && parseFloat(data.cash_to_seller) > 0
+      ? `Sub-To lets your client walk away with $${parseFloat(data.cash_to_seller).toLocaleString()} at closing while we take on the existing mortgage + pay your commission.`
+      : `Sub-To lets your client walk away at $0 obligation while we take on full responsibility + pay your commission.`;
+    const sum = data.include_subto?`Cash = fast certain close. ${cashToSellerSummary} Happy to discuss.`:'Cash provides a fast certain close. Happy to discuss further.';
     const sl = doc.splitTextToSize(sum, CW-55); doc.text(sl, M+55, y); y+=sl.length*12+15;
     doc.text('Sincerely,', M, y); y+=30; doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(nr,ng,nb); doc.text(data.sender_name, M, y);
     y+=13; doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(100,100,100);
@@ -664,7 +1088,8 @@ export default function IronbridgeApp() {
   const generateLoiHtml = (data) => {
     const full = [data.property_address,data.city,data.state,data.zip].filter(Boolean).join(', ');
     const cash = data.cash_offer ? parseFloat(data.cash_offer).toLocaleString() : '';
-    const sub = data.include_subto ? `<h3 style="color:${NAVY};font-family:Arial;font-size:11pt;margin-top:14px;margin-bottom:6px;">OPTION 2 &mdash; SUBJECT-TO EXISTING MORTGAGE</h3><ul style="font-family:Arial;font-size:10pt;margin:0;padding-left:20px;"><li><strong>Purchase Price:</strong> Subject-to existing mortgage &middot; $0 cash to Seller at COE</li><li>Seller leaves loan; Buyer assumes payments</li><li><strong>Agent Fee:</strong> 1% by Buyer &middot; Buyer pays closing costs</li><li><strong>DD:</strong> 15 biz days &middot; Close: On or before 60 days</li><li>As-Is &middot; Buyer's choice of Escrow &middot; Vesting during Escrow</li><li>Buyer responsible for taxes, insurance, all payments after COE</li></ul>` : '';
+    const cashToSeller = data.cash_to_seller ? `$${parseFloat(data.cash_to_seller).toLocaleString()}` : '$0';
+    const sub = data.include_subto ? `<h3 style="color:${NAVY};font-family:Arial;font-size:11pt;margin-top:14px;margin-bottom:6px;">OPTION 2 &mdash; SUBJECT-TO EXISTING MORTGAGE</h3><ul style="font-family:Arial;font-size:10pt;margin:0;padding-left:20px;"><li><strong>Purchase Price:</strong> Subject-to existing mortgage &middot; ${cashToSeller} cash to Seller at COE</li><li>Seller leaves existing loan in place; Buyer assumes payments</li><li><strong>Agent Fee:</strong> 1% by Buyer &middot; Buyer pays closing costs</li><li><strong>DD:</strong> 15 biz days &middot; Close: On or before 60 days</li><li>As-Is &middot; Buyer's choice of Escrow &middot; Vesting during Escrow</li><li>Buyer responsible for taxes, insurance, all payments after COE</li></ul>` : '';
     return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:8.5in 11in;margin:.5in}body{font-family:Arial;font-size:10pt}</style></head><body>
 <table style="width:100%;border-collapse:collapse;"><tr><td style="vertical-align:top;"><div style="font-size:18pt;font-weight:bold;color:${NAVY};">${COMPANY}</div><div style="font-size:7pt;color:${GOLD};letter-spacing:3px;">R E A L &nbsp; E S T A T E</div></td><td style="vertical-align:top;text-align:right;"><div style="font-weight:bold;color:${NAVY};">${data.sender_name}</div>${data.sender_phone?`<div>P. ${data.sender_phone}</div>`:''}<div>E. ${data.sender_email}</div></td></tr></table>
 <hr style="border:none;border-top:1.5pt solid ${GOLD};margin:8pt 0;">
@@ -678,7 +1103,7 @@ export default function IronbridgeApp() {
 <h3 style="color:${NAVY};font-size:11pt;margin-top:14px;margin-bottom:6px;">OPTION 1 &mdash; CASH OFFER</h3>
 <ul style="font-size:10pt;margin:0;padding-left:20px;"><li><strong>Purchase Price (Cash):</strong> $${cash}</li><li><strong>Due Diligence:</strong> ${data.due_diligence_days} days</li><li><strong>Closing:</strong> ${data.closing_days} days from Effective Date</li><li>Buyer pays all reasonable closing costs</li><li>As-Is &middot; Buyer's choice of Escrow / Title</li></ul>
 ${sub}
-<p><strong>Summary:</strong> ${data.include_subto?`Cash = fast certain close. Sub-To = $0 obligation, we take full responsibility + pay your commission. Happy to discuss.`:'Cash provides a fast certain close. Happy to discuss.'}</p>
+<p><strong>Summary:</strong> ${data.include_subto ? `Cash = fast certain close. ${data.cash_to_seller && parseFloat(data.cash_to_seller) > 0 ? `Sub-To puts $${parseFloat(data.cash_to_seller).toLocaleString()} in your client's pocket at closing while we take on the existing mortgage + pay your commission.` : `Sub-To = $0 obligation, we take full responsibility + pay your commission.`} Happy to discuss.` : 'Cash provides a fast certain close. Happy to discuss.'}</p>
 <p style="margin-top:18pt;">Sincerely,</p>
 <p style="font-weight:bold;color:${NAVY};margin-top:18pt;margin-bottom:0;">${data.sender_name}</p>
 <p style="font-size:8pt;color:#6b7280;margin-top:2pt;">${COMPANY} &middot; ${data.sender_phone||''} ${data.sender_phone&&data.sender_email?'&middot;':''} ${data.sender_email}</p>
@@ -735,6 +1160,8 @@ ${sub}
     { id:'new', label:'New Offer', icon:<Plus size={16}/> },
     { id:'loi', label:'LOI', icon:<FileSignature size={16}/> },
     { id:'psa', label:'PSA', icon:<ScrollText size={16}/> },
+    { id:'calendar', label:'Calendar', icon:<Calendar size={16}/> },
+    { id:'wintheday', label:'Win the Day', icon:<Sun size={16}/> },
     { id:'agents', label:`Agents (${agents.length})`, icon:<UserCheck size={16}/> },
     { id:'buyers', label:`Buyers (${buyers.length})`, icon:<Users size={16}/> },
     { id:'reports', label:'Reports', icon:<BarChart3 size={16}/> },
@@ -950,48 +1377,177 @@ ${sub}
         )}
 
         {/* ── BUYERS TAB ── */}
-        {tab==='buyers'&&(
-          <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-            <div style={{background:NAVY}} className="px-5 py-4 flex justify-between items-center">
-              <h2 className="text-white font-bold text-lg flex items-center gap-2"><Users size={20}/> Buyers List</h2>
-              <button onClick={()=>setShowNewBuyer(true)} style={{background:BURNT_ORANGE}} className="text-white font-semibold py-2 px-4 rounded-lg text-sm flex items-center gap-2"><Plus size={16}/>Add Buyer</button>
-            </div>
-            {buyers.length===0?<div className="py-12 text-center"><Users size={32} className="text-gray-300 mx-auto mb-3"/><p className="text-gray-500">No buyers yet</p></div>
-            :(
-              <div className="divide-y divide-gray-100">
-                {buyers.map(b=>{
-                  const buyerDeals=deals.filter(d=>d.buyer_id===b.id);
-                  return(
-                    <button key={b.id} onClick={()=>setEditingBuyer({...b})} className="w-full text-left p-4 md:p-5 hover:bg-slate-50">
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <div style={{background:`linear-gradient(135deg,${BURNT_ORANGE} 0%,#a04f12 100%)`}} className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0">{initials(b.name)}</div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className="font-bold text-gray-900">{b.name}</p>
-                              <span className={`text-xs px-2 py-0.5 rounded-full ${b.type==='daisy_chain'?'bg-blue-100 text-blue-800':'bg-purple-100 text-purple-800'}`}>{b.type==='daisy_chain'?'Daisy Chain':'End Buyer'}</span>
-                              {!b.active&&<span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Inactive</span>}
+        {tab==='buyers'&&(()=>{
+          const list = filteredBuyers();
+          const allCities = getAllBuyerCities();
+          const pill = (label, color='#6b7280') => label ? (
+            <span key={label} className="text-xs px-2 py-0.5 rounded-full text-white font-medium" style={{background:color}}>{label}</span>
+          ) : null;
+
+          return(
+            <div className="space-y-4">
+              {/* Header */}
+              <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+                <div style={{background:NAVY}} className="px-5 py-4 flex justify-between items-center flex-wrap gap-3">
+                  <div>
+                    <h2 className="text-white font-bold text-lg flex items-center gap-2"><Users size={20}/>Buyers List</h2>
+                    <p className="text-white/60 text-xs mt-0.5">{buyers.length} total · {buyers.filter(b=>b.active).length} active</p>
+                  </div>
+                  <button onClick={()=>setShowNewBuyer(true)} style={{background:BURNT_ORANGE}} className="text-white font-semibold py-2 px-4 rounded-lg text-sm flex items-center gap-2"><Plus size={16}/>Add Buyer</button>
+                </div>
+
+                {/* Filters */}
+                <div className="px-5 py-3 bg-gray-50 border-b border-gray-200 flex gap-3 flex-wrap items-center">
+                  <div className="relative flex-1 min-w-[180px]">
+                    <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+                    <input
+                      type="text"
+                      placeholder="Filter by city..."
+                      value={buyerCityFilter}
+                      onChange={e=>setBuyerCityFilter(e.target.value)}
+                      className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white"/>
+                  </div>
+                  {allCities.length>0&&(
+                    <div className="flex gap-1.5 flex-wrap">
+                      {allCities.slice(0,8).map(city=>(
+                        <button key={city} onClick={()=>setBuyerCityFilter(city===buyerCityFilter?'':city)}
+                          className={`text-xs px-2.5 py-1 rounded-full font-medium border transition-all ${buyerCityFilter===city?'text-white border-transparent':'bg-white border-gray-300 text-gray-600 hover:border-gray-400'}`}
+                          style={buyerCityFilter===city?{background:TEAL}:{}}>
+                          {city}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <select value={buyerTypeFilter} onChange={e=>setBuyerTypeFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white">
+                    <option value="all">All Types</option>
+                    <option value="daisy_chain">Daisy Chain</option>
+                    <option value="end_buyer">End Buyer</option>
+                  </select>
+                  {(buyerCityFilter||buyerTypeFilter!=='all')&&(
+                    <button onClick={()=>{setBuyerCityFilter('');setBuyerTypeFilter('all');}} className="text-xs text-gray-500 hover:text-gray-700 font-semibold">Clear</button>
+                  )}
+                  <span className="text-xs text-gray-400 ml-auto">{list.length} shown</span>
+                </div>
+
+                {list.length===0
+                  ?<div className="py-12 text-center"><Users size={32} className="text-gray-300 mx-auto mb-3"/><p className="text-gray-500">{buyers.length===0?'No buyers yet — add your first one':'No buyers match this filter'}</p></div>
+                  :(
+                    <div className="divide-y divide-gray-100">
+                      {list.map(b=>{
+                        const buyerDeals=deals.filter(d=>d.buyer_id===b.id);
+                        const closedDeals=buyerDeals.filter(d=>d.status==='closed');
+                        return(
+                          <button key={b.id} onClick={()=>setEditingBuyer({...b})} className="w-full text-left p-5 hover:bg-slate-50 transition-colors">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex items-start gap-3 flex-1 min-w-0">
+                                <div style={{background:`linear-gradient(135deg,${BURNT_ORANGE} 0%,#a04f12 100%)`}} className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0">{initials(b.name)}</div>
+                                <div className="flex-1 min-w-0">
+                                  {/* Name + badges */}
+                                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                                    <p className="font-bold text-gray-900 text-base">{b.name}</p>
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${b.type==='daisy_chain'?'bg-blue-100 text-blue-800':'bg-purple-100 text-purple-800'}`}>{b.type==='daisy_chain'?'Daisy Chain':'End Buyer'}</span>
+                                    {!b.active&&<span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Inactive</span>}
+                                  </div>
+
+                                  {/* Company + contact */}
+                                  {b.company&&<p className="text-sm text-gray-600 mb-1"><Building size={12} className="inline mr-1"/>{b.company}</p>}
+                                  <div className="flex gap-4 text-xs text-gray-500 mb-3">
+                                    {b.phone&&<span><Phone size={11} className="inline mr-1"/>{b.phone}</span>}
+                                    {b.email&&<span><Mail size={11} className="inline mr-1"/>{b.email}</span>}
+                                  </div>
+
+                                  {/* BUY BOX */}
+                                  {(b.buy_box_min||b.buy_box_max||b.buy_box_cities||b.buy_box_property_types||b.buy_box_deal_types||b.buy_box_condition||b.buy_box_timeline_days)&&(
+                                    <div className="bg-gray-50 rounded-xl p-3 border border-gray-200">
+                                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Buy Box</p>
+                                      <div className="space-y-1.5">
+                                        {(b.buy_box_min||b.buy_box_max)&&(
+                                          <div className="flex items-start gap-2">
+                                            <span className="text-xs font-semibold text-gray-500 w-16 flex-shrink-0">💰 Price</span>
+                                            <span className="text-xs text-gray-800 font-semibold">{b.buy_box_min?fmtM(b.buy_box_min):''}{b.buy_box_min&&b.buy_box_max?' – ':''}{b.buy_box_max?fmtM(b.buy_box_max):''}</span>
+                                          </div>
+                                        )}
+                                        {(b.buy_box_cities||b.buy_box_areas)&&(
+                                          <div className="flex items-start gap-2">
+                                            <span className="text-xs font-semibold text-gray-500 w-16 flex-shrink-0">📍 Cities</span>
+                                            <div className="flex gap-1 flex-wrap">
+                                              {(b.buy_box_cities||b.buy_box_areas).split(/[,·\n]/).map(c=>c.trim()).filter(Boolean).map(c=>(
+                                                <span key={c} className="text-xs bg-teal-50 text-teal-800 px-2 py-0.5 rounded-full font-medium border border-teal-200">{c}</span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+                                        {b.buy_box_property_types&&(
+                                          <div className="flex items-start gap-2">
+                                            <span className="text-xs font-semibold text-gray-500 w-16 flex-shrink-0">🏠 Type</span>
+                                            <div className="flex gap-1 flex-wrap">
+                                              {b.buy_box_property_types.split(/[,·]/).map(t=>t.trim()).filter(Boolean).map(t=>(
+                                                <span key={t} className="text-xs bg-blue-50 text-blue-800 px-2 py-0.5 rounded-full font-medium">{t}</span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+                                        {b.buy_box_deal_types&&(
+                                          <div className="flex items-start gap-2">
+                                            <span className="text-xs font-semibold text-gray-500 w-16 flex-shrink-0">📋 Deals</span>
+                                            <div className="flex gap-1 flex-wrap">
+                                              {b.buy_box_deal_types.split(/[,·]/).map(t=>t.trim()).filter(Boolean).map(t=>(
+                                                <span key={t} className="text-xs px-2 py-0.5 rounded-full font-medium" style={{background:'#fef3c7',color:'#92400e'}}>{t}</span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+                                        {b.buy_box_condition&&(
+                                          <div className="flex items-start gap-2">
+                                            <span className="text-xs font-semibold text-gray-500 w-16 flex-shrink-0">🔨 Cond.</span>
+                                            <span className="text-xs text-gray-700">{b.buy_box_condition}</span>
+                                          </div>
+                                        )}
+                                        {b.buy_box_timeline_days&&(
+                                          <div className="flex items-start gap-2">
+                                            <span className="text-xs font-semibold text-gray-500 w-16 flex-shrink-0">⏱️ Close</span>
+                                            <span className="text-xs text-gray-700">Within {b.buy_box_timeline_days} days</span>
+                                          </div>
+                                        )}
+                                        {b.buy_box_max_repairs&&(
+                                          <div className="flex items-start gap-2">
+                                            <span className="text-xs font-semibold text-gray-500 w-16 flex-shrink-0">🔧 Repairs</span>
+                                            <span className="text-xs text-gray-700">Max {fmtM(b.buy_box_max_repairs)}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {b.notes&&<p className="text-xs text-gray-500 mt-2 italic">{b.notes}</p>}
+                                </div>
+                              </div>
+
+                              {/* Deal stats */}
+                              <div className="text-right flex-shrink-0 space-y-1">
+                                <div>
+                                  <p className="text-xl font-bold" style={{color:NAVY}}>{buyerDeals.length}</p>
+                                  <p className="text-xs text-gray-500">deals</p>
+                                </div>
+                                {closedDeals.length>0&&(
+                                  <div>
+                                    <p className="text-base font-bold text-green-600">{closedDeals.length}</p>
+                                    <p className="text-xs text-gray-500">closed</p>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                            {b.company&&<p className="text-sm text-gray-600"><Building size={12} className="inline mr-1"/>{b.company}</p>}
-                            <div className="flex gap-3 mt-0.5">
-                              {b.phone&&<p className="text-xs text-gray-500"><Phone size={11} className="inline mr-1"/>{b.phone}</p>}
-                              {b.email&&<p className="text-xs text-gray-500"><Mail size={11} className="inline mr-1"/>{b.email}</p>}
-                            </div>
-                            {(b.buy_box_min||b.buy_box_max)&&<p className="text-xs text-gray-500 mt-0.5">Buy box: {b.buy_box_min?fmtM(b.buy_box_min):''}{b.buy_box_min&&b.buy_box_max?' – ':''}{b.buy_box_max?fmtM(b.buy_box_max):''}</p>}
-                          </div>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-lg font-bold" style={{color:NAVY}}>{buyerDeals.length}</p>
-                          <p className="text-xs text-gray-500">deals</p>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )
+                }
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          );
+        })()}
+
 
         {/* ── REPORTS TAB ── */}
         {tab==='reports'&&(
@@ -1061,6 +1617,416 @@ ${sub}
         )}
 
         {/* ── PROFILE TAB ── */}
+        {tab==='calendar'&&(
+          <div className="space-y-4">
+            {/* Header */}
+            <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+              <div style={{background:NAVY}} className="px-5 py-4 flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <button onClick={()=>{const d=new Date(calDate);calView==='week'?d.setDate(d.getDate()-7):d.setMonth(d.getMonth()-1);setCalDate(new Date(d));}} className="text-white/70 hover:text-white p-1"><ChevronLeft size={20}/></button>
+                  <h2 className="text-white font-bold text-lg">
+                    {calView==='week'
+                      ? `Week of ${getWeekDays(calDate)[0].toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${getWeekDays(calDate)[6].toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`
+                      : calDate.toLocaleDateString('en-US',{month:'long',year:'numeric'})}
+                  </h2>
+                  <button onClick={()=>{const d=new Date(calDate);calView==='week'?d.setDate(d.getDate()+7):d.setMonth(d.getMonth()+1);setCalDate(new Date(d));}} className="text-white/70 hover:text-white p-1"><ChevronRight size={20}/></button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1 bg-white/10 rounded-lg p-1">
+                    <button onClick={()=>setCalView('week')} className={`px-3 py-1 rounded-md text-sm font-semibold ${calView==='week'?'bg-white text-gray-900':'text-white/70'}`}>Week</button>
+                    <button onClick={()=>setCalView('month')} className={`px-3 py-1 rounded-md text-sm font-semibold ${calView==='month'?'bg-white text-gray-900':'text-white/70'}`}>Month</button>
+                  </div>
+                  <button onClick={()=>{setCalDate(new Date());}} className="bg-white/10 hover:bg-white/20 text-white text-sm font-semibold px-3 py-1.5 rounded-lg">Today</button>
+                  <button onClick={()=>{setNewEvent(blankEvent());setShowNewEvent(true);}} style={{background:BURNT_ORANGE}} className="text-white font-semibold px-4 py-1.5 rounded-lg text-sm flex items-center gap-1"><Plus size={16}/>Add Event</button>
+                </div>
+              </div>
+
+              {/* Legend */}
+              <div className="px-5 py-2 bg-gray-50 border-b border-gray-200 flex items-center gap-6 text-xs font-semibold flex-wrap">
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full inline-block" style={{background:NAVY}}></span>Geno</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full inline-block" style={{background:TEAL}}></span>Mike</span>
+                {EVENT_TYPES.map(t=><span key={t.value} className="flex items-center gap-1">{t.icon}<span className="text-gray-600">{t.label}</span></span>)}
+              </div>
+
+              {/* Week View */}
+              {calView==='week'&&(
+                <div className="overflow-x-auto">
+                  <div className="grid grid-cols-8 min-w-[700px]">
+                    <div className="bg-gray-50 border-b border-r border-gray-200 p-3 text-xs font-bold text-gray-500 uppercase">Time</div>
+                    {getWeekDays(calDate).map((day,i)=>{
+                      const isToday=day.toDateString()===new Date().toDateString();
+                      return(
+                        <div key={i} style={isToday?{background:`${NAVY}15`}:{}} className="border-b border-r border-gray-200 p-3 text-center">
+                          <p className="text-xs font-bold text-gray-500 uppercase">{day.toLocaleDateString('en-US',{weekday:'short'})}</p>
+                          <p className={`text-lg font-bold ${isToday?'text-white w-8 h-8 rounded-full flex items-center justify-center mx-auto':'text-gray-900'}`} style={isToday?{background:BURNT_ORANGE}:{}}>{day.getDate()}</p>
+                        </div>
+                      );
+                    })}
+                    {/* Events row */}
+                    <div className="border-r border-gray-200 p-2 bg-gray-50"></div>
+                    {getWeekDays(calDate).map((day,i)=>{
+                      const evs=eventsOnDay(day);
+                      return(
+                        <div key={i} className="border-r border-gray-200 p-2 min-h-[120px] space-y-1">
+                          {evs.map(ev=>{
+                            const meta=getEventMeta(ev.type);
+                            const isGenoEv=ev.profiles?.email==='eugenemcneil20@gmail.com';
+                            const evColor=ev.is_auto?'#ef4444':isGenoEv?NAVY:TEAL;
+                            return(
+                              <button key={ev.id} onClick={()=>!ev.is_auto&&setEditingEvent({...ev})}
+                                className="w-full text-left px-2 py-1 rounded-md text-xs font-medium text-white truncate"
+                                style={{background:evColor}}>
+                                {ev.start_time?ev.start_time.slice(0,5)+' ':''}{meta.icon} {ev.title}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Month View */}
+              {calView==='month'&&(
+                <div>
+                  <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-200">
+                    {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>(
+                      <div key={d} className="p-2 text-center text-xs font-bold text-gray-500 uppercase border-r border-gray-200 last:border-0">{d}</div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7">
+                    {getMonthDays(calDate).map((day,i)=>{
+                      const isThisMonth=day.getMonth()===calDate.getMonth();
+                      const isToday=day.toDateString()===new Date().toDateString();
+                      const evs=eventsOnDay(day);
+                      return(
+                        <div key={i} className={`border-b border-r border-gray-200 p-2 min-h-[80px] ${!isThisMonth?'bg-gray-50 opacity-50':''}`}>
+                          <p className={`text-sm font-bold mb-1 w-7 h-7 flex items-center justify-center rounded-full ${isToday?'text-white':'text-gray-700'}`} style={isToday?{background:BURNT_ORANGE}:{}}>{day.getDate()}</p>
+                          {evs.slice(0,3).map(ev=>{
+                            const isGenoEv=ev.profiles?.email==='eugenemcneil20@gmail.com';
+                            const evColor=ev.is_auto?'#ef4444':isGenoEv?NAVY:TEAL;
+                            return(
+                              <div key={ev.id} className="text-xs px-1 py-0.5 rounded mb-0.5 text-white truncate" style={{background:evColor}}>{ev.title}</div>
+                            );
+                          })}
+                          {evs.length>3&&<p className="text-xs text-gray-400">+{evs.length-3} more</p>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Upcoming events list */}
+            <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+              <div style={{background:NAVY}} className="px-5 py-3">
+                <h3 className="text-white font-bold">Upcoming — Next 7 Days</h3>
+              </div>
+              {(()=>{
+                const days=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()+i);return d;});
+                const upcoming=days.flatMap(d=>eventsOnDay(d).map(e=>({...e,_day:d})));
+                if(!upcoming.length) return <p className="p-5 text-gray-500 text-sm">Nothing scheduled in the next 7 days</p>;
+                return(
+                  <div className="divide-y divide-gray-100">
+                    {upcoming.map(ev=>{
+                      const meta=getEventMeta(ev.type);
+                      const isGenoEv=ev.profiles?.email==='eugenemcneil20@gmail.com' || (!ev.profiles && ev.user_id===user?.id);
+                      const evColor=ev.is_auto?'#ef4444':isGenoEv?NAVY:TEAL;
+                      const person=ev.profiles?.full_name||ev.profiles?.email?.split('@')[0]||'—';
+                      return(
+                        <div key={ev.id} className="flex items-center gap-3 px-5 py-3">
+                          <div className="w-2 h-8 rounded-full flex-shrink-0" style={{background:evColor}}/>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-gray-900 truncate">{meta.icon} {ev.title}</p>
+                            <p className="text-xs text-gray-500">{new Date(ev.date+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} {ev.start_time?`· ${ev.start_time.slice(0,5)}`:''} · <span style={{color:evColor}} className="font-semibold">{ev.is_auto?'Deal Alert':person}</span></p>
+                          </div>
+                          {ev.agent_phone&&<a href={`tel:${ev.agent_phone}`} className="text-xs font-semibold flex items-center gap-1" style={{color:TEAL}}><PhoneCall size={12}/>{ev.agent_phone}</a>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* ── WIN THE DAY TAB ── */}
+        {tab==='wintheday'&&(()=>{
+          const today=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+          const geno=isGeno(user);
+          const myOffers=parseInt(logOffers)||0;
+          const myConvos=parseInt(logConvos)||0;
+          const myContacts=parseInt(logContacts)||0;
+          const genoGoalHit=myOffers>=GENO_GOAL;
+          const mikeGoalHit=myConvos>=MIKE_CONVO_GOAL&&myContacts>=MIKE_CONTACT_GOAL;
+          const goalHit=geno?genoGoalHit:mikeGoalHit;
+
+          // Other user
+          const otherLogs=allLogs.filter(l=>l.log_date===new Date().toISOString().split('T')[0]&&l.user_id!==user?.id);
+          const otherLog=otherLogs[0];
+          const otherProfile=otherLog?.profiles;
+          const otherIsGeno=otherProfile?.email==='eugenemcneil20@gmail.com';
+          const otherOffers=otherLog?.offers_made||0;
+          const otherConvos=otherLog?.new_convos||0;
+          const otherContacts=otherLog?.new_contacts||0;
+          const otherGoalHit=otherIsGeno?(otherOffers>=GENO_GOAL):(otherConvos>=MIKE_CONVO_GOAL&&otherContacts>=MIKE_CONTACT_GOAL);
+
+          // Streak
+          const myStreak=calcStreak(user?.id);
+
+          // Week grid
+          const myGrid=getWeekGrid(user?.id);
+
+          // Option alerts
+          const optAlerts=getOptionAlerts();
+
+          // Needs attention
+          const today_iso=new Date().toISOString().split('T')[0];
+          const needsAttention=deals.filter(d=>{
+            if(d.status==='dead'||d.status==='closed') return false;
+            if(d.closing_date===today_iso||d.option_period_expiration===today_iso) return true;
+            const daysOld=Math.floor((new Date()-new Date(d.updated_at||d.created_at))/86400000);
+            return daysOld>=3;
+          }).slice(0,4);
+
+          const todayEvs=eventsOnDay(new Date());
+
+          return(
+            <div className="space-y-4 max-w-3xl mx-auto">
+              {/* Option alerts banner */}
+              {optAlerts.length>0&&(
+                <div className={`rounded-2xl p-4 shadow-xl ${optAlerts.some(a=>a.type==='24hr'||a.type==='expired')?'bg-red-600':'bg-amber-500'} text-white`}>
+                  <div className="flex items-center gap-2 mb-2"><AlertCircle size={20}/><span className="font-bold text-lg">Option Period Alert</span></div>
+                  {optAlerts.map((a,i)=>(
+                    <div key={i} className="flex items-center gap-2 bg-white/20 rounded-lg px-3 py-2 mb-1">
+                      <span className="font-semibold text-sm">{a.label} — {a.deal.property_address}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Good morning */}
+              <div style={{background:`linear-gradient(135deg,${NAVY} 0%,${TEAL} 100%)`}} className="rounded-2xl p-6 text-white shadow-2xl">
+                <div className="flex items-center gap-3 mb-1">
+                  <Sun size={28} className="text-yellow-300"/>
+                  <h2 className="text-2xl font-bold">Good morning, {user?.full_name?.split(' ')[0]}!</h2>
+                </div>
+                <p className="text-white/70 text-sm">{today}</p>
+                {myStreak>=3&&<div className="mt-3 flex items-center gap-2 bg-white/10 rounded-lg px-3 py-2 w-fit"><Flame size={16} className="text-orange-300"/><span className="text-sm font-semibold">{myStreak}-day streak 🔥</span></div>}
+              </div>
+
+              {/* Scorecard */}
+              <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+                <div style={{background:NAVY}} className="px-5 py-3 flex items-center gap-2">
+                  <Target size={18} className="text-white"/>
+                  <h3 className="text-white font-bold">Today's Scorecard</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-200">
+
+                  {/* MY SIDE */}
+                  <div className="p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">{user?.full_name||'Me'}</p>
+                        <p className="text-sm text-gray-500">{geno?'5 offers / LOIs per day':'5 convos + 5 contacts per day'}</p>
+                      </div>
+                      {goalHit&&<span className="text-2xl">🔥</span>}
+                    </div>
+
+                    {geno?(
+                      <>
+                        <div className="flex items-end gap-2 mb-2">
+                          <span className="text-4xl font-bold" style={{color:genoGoalHit?'#10b981':NAVY}}>{myOffers}</span>
+                          <span className="text-xl text-gray-400 mb-1">/ {GENO_GOAL}</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-3 mb-3">
+                          <div className="h-3 rounded-full" style={{width:`${Math.min(myOffers/GENO_GOAL*100,100)}%`,background:genoGoalHit?'#10b981':BURNT_ORANGE}}/>
+                        </div>
+                        <p className="text-sm font-semibold text-gray-600 mb-3">{genoGoalHit?'✅ Goal hit!':`${GENO_GOAL-myOffers} more to hit goal`}</p>
+                        <label className="text-xs font-bold text-gray-700 uppercase tracking-wide block mb-1.5">Log today's offers</label>
+                        <div className="flex gap-2">
+                          <input type="number" min="0" value={logOffers} onChange={e=>setLogOffers(e.target.value)} className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 font-semibold text-2xl text-center" placeholder="0"/>
+                          <button onClick={saveLog} disabled={logSaving} style={{background:BURNT_ORANGE}} className="px-4 py-2 rounded-lg text-white font-semibold text-sm disabled:opacity-60 flex items-center gap-1">{logSaving?<Loader2 size={16} className="animate-spin"/>:<CheckSquare size={16}/>}Save</button>
+                        </div>
+                      </>
+                    ):(
+                      <>
+                        {/* Mike — two goals: convos and contacts */}
+                        <div className="space-y-4">
+                          <div>
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-sm font-bold text-gray-700 flex items-center gap-1"><PhoneCall size={14} style={{color:TEAL}}/>New Agent Convos</span>
+                              <span className="text-sm font-bold" style={{color:myConvos>=MIKE_CONVO_GOAL?'#10b981':NAVY}}>{myConvos} / {MIKE_CONVO_GOAL}</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+                              <div className="h-2.5 rounded-full" style={{width:`${Math.min(myConvos/MIKE_CONVO_GOAL*100,100)}%`,background:myConvos>=MIKE_CONVO_GOAL?'#10b981':TEAL}}/>
+                            </div>
+                            <input type="number" min="0" value={logConvos} onChange={e=>setLogConvos(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 font-semibold text-xl text-center" placeholder="0"/>
+                          </div>
+                          <div>
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-sm font-bold text-gray-700 flex items-center gap-1"><Users size={14} style={{color:BURNT_ORANGE}}/>New Contacts (Mojo)</span>
+                              <span className="text-sm font-bold" style={{color:myContacts>=MIKE_CONTACT_GOAL?'#10b981':NAVY}}>{myContacts} / {MIKE_CONTACT_GOAL}</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+                              <div className="h-2.5 rounded-full" style={{width:`${Math.min(myContacts/MIKE_CONTACT_GOAL*100,100)}%`,background:myContacts>=MIKE_CONTACT_GOAL?'#10b981':BURNT_ORANGE}}/>
+                            </div>
+                            <input type="number" min="0" value={logContacts} onChange={e=>setLogContacts(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 font-semibold text-xl text-center" placeholder="0"/>
+                          </div>
+                          <button onClick={saveLog} disabled={logSaving} style={{background:mikeGoalHit?'#10b981':BURNT_ORANGE}} className="w-full py-2.5 rounded-lg text-white font-semibold text-sm disabled:opacity-60 flex items-center justify-center gap-2">{logSaving?<Loader2 size={16} className="animate-spin"/>:<CheckSquare size={16}/>}{mikeGoalHit?'🔥 Goal Hit — Save':'Save Progress'}</button>
+                        </div>
+                      </>
+                    )}
+                    {logMsg&&<p className={`mt-2 text-sm font-semibold ${logMsg.startsWith('Error')?'text-red-600':'text-green-600'}`}>{logMsg}</p>}
+                  </div>
+
+                  {/* OTHER USER'S SIDE */}
+                  <div className="p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">{otherProfile?.full_name||'Teammate'}</p>
+                        <p className="text-sm text-gray-500">{otherIsGeno?'5 offers / LOIs per day':'5 convos + 5 contacts per day'}</p>
+                      </div>
+                      {otherGoalHit&&<span className="text-2xl">🔥</span>}
+                    </div>
+                    {otherIsGeno?(
+                      <>
+                        <div className="flex items-end gap-2 mb-2">
+                          <span className="text-4xl font-bold" style={{color:otherOffers>=GENO_GOAL?'#10b981':NAVY}}>{otherOffers}</span>
+                          <span className="text-xl text-gray-400 mb-1">/ {GENO_GOAL}</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-3">
+                          <div className="h-3 rounded-full" style={{width:`${Math.min(otherOffers/GENO_GOAL*100,100)}%`,background:otherOffers>=GENO_GOAL?'#10b981':NAVY}}/>
+                        </div>
+                      </>
+                    ):(
+                      <div className="space-y-3">
+                        <div>
+                          <div className="flex justify-between text-sm font-semibold mb-1"><span className="flex items-center gap-1"><PhoneCall size={13}/>Convos</span><span style={{color:otherConvos>=MIKE_CONVO_GOAL?'#10b981':TEAL}}>{otherConvos}/{MIKE_CONVO_GOAL}</span></div>
+                          <div className="w-full bg-gray-200 rounded-full h-2.5"><div className="h-2.5 rounded-full" style={{width:`${Math.min(otherConvos/MIKE_CONVO_GOAL*100,100)}%`,background:otherConvos>=MIKE_CONVO_GOAL?'#10b981':TEAL}}/></div>
+                        </div>
+                        <div>
+                          <div className="flex justify-between text-sm font-semibold mb-1"><span className="flex items-center gap-1"><Users size={13}/>Contacts</span><span style={{color:otherContacts>=MIKE_CONTACT_GOAL?'#10b981':BURNT_ORANGE}}>{otherContacts}/{MIKE_CONTACT_GOAL}</span></div>
+                          <div className="w-full bg-gray-200 rounded-full h-2.5"><div className="h-2.5 rounded-full" style={{width:`${Math.min(otherContacts/MIKE_CONTACT_GOAL*100,100)}%`,background:otherContacts>=MIKE_CONTACT_GOAL?'#10b981':BURNT_ORANGE}}/></div>
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-sm text-gray-400 mt-3">{otherLog?'Last updated today':'No activity logged yet'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* This week's grid */}
+              <div className="bg-white rounded-2xl shadow-xl p-5">
+                <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2"><Zap size={18} style={{color:BURNT_ORANGE}}/>This Week — Daily Goals</h3>
+                <div className="flex gap-3 justify-between">
+                  {myGrid.map((day,i)=>(
+                    <div key={i} className="flex-1 text-center">
+                      <p className="text-xs font-bold text-gray-500 mb-2">{day.label}</p>
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center mx-auto text-lg" style={{background:day.future?'#f3f4f6':day.hit?'#10b981':'#fee2e2'}}>
+                        {day.future?'·':day.hit?'✅':'❌'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Weekly buyer goal — Geno only */}
+              {geno&&(()=>{
+                const weekBuyers = buyersAddedThisWeek(user?.id);
+                const buyerGoalHit = weekBuyers >= GENO_BUYER_GOAL;
+                const buyerPct = Math.min(Math.round(weekBuyers / GENO_BUYER_GOAL * 100), 100);
+                return(
+                  <div className="bg-white rounded-2xl shadow-xl p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                        <Users size={18} style={{color:TEAL}}/>Weekly Buyer Goal
+                      </h3>
+                      {buyerGoalHit&&<span className="text-xl">🔥</span>}
+                    </div>
+                    <div className="flex items-end gap-2 mb-3">
+                      <span className="text-4xl font-bold" style={{color:buyerGoalHit?'#10b981':NAVY}}>{weekBuyers}</span>
+                      <span className="text-xl text-gray-400 mb-1">/ {GENO_BUYER_GOAL} buyers this week</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3 mb-3">
+                      <div className="h-3 rounded-full transition-all" style={{width:`${buyerPct}%`,background:buyerGoalHit?'#10b981':TEAL}}/>
+                    </div>
+                    <p className="text-sm font-semibold text-gray-600 mb-3">
+                      {buyerGoalHit?'✅ Weekly buyer goal hit!':`${GENO_BUYER_GOAL - weekBuyers} more buyer${GENO_BUYER_GOAL - weekBuyers !== 1?'s':''} to hit this week's goal`}
+                    </p>
+                    <button onClick={()=>setTab('buyers')} style={{background:`linear-gradient(135deg,${TEAL} 0%,${NAVY} 100%)`}}
+                      className="w-full text-white font-semibold py-2.5 rounded-lg text-sm flex items-center justify-center gap-2">
+                      <Plus size={16}/>Add a Buyer
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/* Needs attention */}
+              {needsAttention.length>0&&(
+                <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+                  <div className="px-5 py-3 border-b border-gray-200 flex items-center gap-2">
+                    <AlertCircle size={18} className="text-amber-500"/>
+                    <h3 className="font-bold text-gray-900">Needs Attention</h3>
+                  </div>
+                  <div className="divide-y divide-gray-100">
+                    {needsAttention.map(d=>{
+                      const today_iso=new Date().toISOString().split('T')[0];
+                      const urgent=d.closing_date===today_iso||d.option_period_expiration===today_iso;
+                      const sm=getStatusMeta(d.status);
+                      return(
+                        <div key={d.id} className="px-5 py-3 flex items-center gap-3">
+                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:urgent?'#ef4444':'#f59e0b'}}/>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-gray-900 truncate">{d.property_address}</p>
+                            <p className="text-xs text-gray-500">
+                              {urgent?<span className="text-red-600 font-semibold">🔴 {d.closing_date===today_iso?'Closing TODAY':d.option_period_expiration===today_iso?'Option expires TODAY':''}</span>:`${Math.floor((new Date()-new Date(d.updated_at||d.created_at))/86400000)} days without update`}
+                            </p>
+                          </div>
+                          <span style={{background:sm.bg,color:sm.text}} className="text-xs px-2 py-0.5 rounded font-bold">{sm.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Today on calendar */}
+              <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2"><Calendar size={18} style={{color:TEAL}}/><h3 className="font-bold text-gray-900">Today on the Calendar</h3></div>
+                  <button onClick={()=>setTab('calendar')} className="text-xs font-semibold" style={{color:TEAL}}>View Calendar →</button>
+                </div>
+                {todayEvs.length===0
+                  ?<p className="px-5 py-4 text-sm text-gray-400">Nothing scheduled today — <button onClick={()=>{setTab('calendar');setShowNewEvent(true);}} className="underline" style={{color:BURNT_ORANGE}}>add an event</button></p>
+                  :<div className="divide-y divide-gray-100">
+                    {todayEvs.map(ev=>{
+                      const meta=getEventMeta(ev.type);
+                      const isGenoEv=ev.profiles?.email==='eugenemcneil20@gmail.com'||(!ev.profiles&&ev.user_id===user?.id);
+                      return(
+                        <div key={ev.id} className="px-5 py-3 flex items-center gap-3">
+                          <span className="text-lg">{meta.icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-gray-900 truncate">{ev.title}</p>
+                            <div className="flex items-center gap-2">
+                              {ev.start_time&&<span className="text-xs text-gray-500">{ev.start_time.slice(0,5)}{ev.end_time?` – ${ev.end_time.slice(0,5)}`:''}</span>}
+                              <span className="text-xs font-semibold" style={{color:isGenoEv?NAVY:TEAL}}>{ev.is_auto?'Deal Alert':ev.profiles?.full_name||'You'}</span>
+                            </div>
+                          </div>
+                          {ev.agent_phone&&<a href={`tel:${ev.agent_phone}`} style={{color:TEAL}} className="text-xs flex items-center gap-1 font-semibold"><PhoneCall size={14}/>{ev.agent_phone}</a>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                }
+              </div>
+            </div>
+          );
+        })()}
+
         {tab==='psa'&&(
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {/* PSA Form */}
@@ -1261,6 +2227,108 @@ ${sub}
         )}
 
         {/* ── NEW AGENT MODAL ── */}
+        {/* ── CONTRACT UPLOAD GATE MODAL ── */}
+        {contractModal&&(
+          <div className="fixed inset-0 bg-black/70 z-[70] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
+              <div style={{background:NAVY}} className="px-5 py-4 rounded-t-2xl">
+                <h2 className="text-lg font-bold text-white flex items-center gap-2"><FileText size={20}/>Contract Upload</h2>
+                <p className="text-white/70 text-sm mt-0.5">Required before saving — this sets your option expiration clock</p>
+              </div>
+              <div className="p-5 space-y-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                  <p className="text-sm font-semibold text-blue-900">📎 {contractModal.file.name}</p>
+                </div>
+
+                <FField label="Execution Date * (date both parties signed)">
+                  <input type="date" value={contractExecDate} onChange={e=>setContractExecDate(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 text-sm font-semibold"/>
+                </FField>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <FField label="Option Period *">
+                    <input type="number" value={contractDays} onChange={e=>setContractDays(e.target.value)} min="1"
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 text-sm font-semibold" placeholder="15"/>
+                  </FField>
+                  <FField label="Day Type *">
+                    <select value={contractDayType} onChange={e=>setContractDayType(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 text-sm">
+                      <option value="business">Business Days</option>
+                      <option value="calendar">Calendar Days</option>
+                    </select>
+                  </FField>
+                </div>
+
+                {contractExecDate && contractDays && (()=>{
+                  const exp = contractDayType==='business'
+                    ? (() => { const r=new Date(contractExecDate+'T00:00:00'); let a=0; while(a<parseInt(contractDays)){r.setDate(r.getDate()+1);if(r.getDay()!==0&&r.getDay()!==6)a++;} return r; })()
+                    : (() => { const r=new Date(contractExecDate+'T00:00:00'); r.setDate(r.getDate()+parseInt(contractDays)); return r; })();
+                  return(
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                      <p className="text-xs font-bold text-amber-700 uppercase tracking-wide mb-1">Option Expires</p>
+                      <p className="text-lg font-bold text-amber-900">{exp.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}</p>
+                      <p className="text-xs text-amber-700 mt-0.5">{contractDays} {contractDayType} days from {new Date(contractExecDate+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</p>
+                    </div>
+                  );
+                })()}
+
+                <div className="flex gap-3 mt-2">
+                  <button onClick={()=>setContractModal(null)} className="flex-1 py-3 rounded-lg bg-gray-100 text-gray-700 font-semibold text-sm">Cancel</button>
+                  <button onClick={handleContractSave} disabled={contractSaving||!contractExecDate||!contractDays}
+                    style={{background:`linear-gradient(135deg,${BURNT_ORANGE} 0%,#a04f12 100%)`}}
+                    className="flex-1 py-3 rounded-lg text-white font-semibold text-sm disabled:opacity-60 flex items-center justify-center gap-2">
+                    {contractSaving?<Loader2 size={18} className="animate-spin"/>:<CheckSquare size={18}/>}
+                    {contractSaving?'Saving...':'Upload Contract'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── NEW EVENT MODAL ── */}
+        {showNewEvent&&(
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
+              <div style={{background:NAVY}} className="px-5 py-4 flex justify-between items-center rounded-t-2xl">
+                <h2 className="text-lg font-bold text-white flex items-center gap-2"><Calendar size={20}/>Add Event</h2>
+                <button onClick={()=>setShowNewEvent(false)} className="text-white/70 hover:text-white"><X size={24}/></button>
+              </div>
+              <div className="p-5 space-y-4">
+                <EventFormFields event={newEvent} setEvent={setNewEvent} deals={deals}/>
+                <button onClick={()=>saveEvent(true)} disabled={savingEvent||!newEvent.title}
+                  style={{background:`linear-gradient(135deg,${BURNT_ORANGE} 0%,#a04f12 100%)`}}
+                  className="w-full text-white font-semibold py-3 rounded-lg disabled:opacity-60 flex items-center justify-center gap-2">
+                  {savingEvent&&<Loader2 size={18} className="animate-spin"/>}Save Event
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── EDIT EVENT MODAL ── */}
+        {editingEvent&&(
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
+              <div style={{background:NAVY}} className="px-5 py-4 flex justify-between items-center rounded-t-2xl">
+                <h2 className="text-lg font-bold text-white flex items-center gap-2"><Edit3 size={20}/>Edit Event</h2>
+                <button onClick={()=>setEditingEvent(null)} className="text-white/70 hover:text-white"><X size={24}/></button>
+              </div>
+              <div className="p-5 space-y-4">
+                <EventFormFields event={editingEvent} setEvent={setEditingEvent} deals={deals}/>
+                <div className="flex gap-3">
+                  <button onClick={()=>saveEvent(false)} disabled={savingEvent}
+                    style={{background:`linear-gradient(135deg,${TEAL} 0%,${NAVY} 100%)`}}
+                    className="flex-1 text-white font-semibold py-3 rounded-lg disabled:opacity-60 flex items-center justify-center gap-2">
+                    {savingEvent&&<Loader2 size={18} className="animate-spin"/>}Save Changes
+                  </button>
+                  <button onClick={deleteEvent} disabled={savingEvent} className="px-4 py-3 rounded-lg bg-red-50 text-red-700 font-semibold hover:bg-red-100 flex items-center gap-2"><Trash2 size={18}/></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showNewAgent&&(
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
@@ -1395,10 +2463,30 @@ function OfferForm({ deal, setDeal, buyers }) {
       <div>
         <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">Status</label>
         <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
-          {STATUS_OPTIONS.map(s=>(
-            <button key={s.value} type="button" onClick={()=>u('status',s.value)} style={deal.status===s.value?{background:s.color,color:'white',borderColor:s.color}:{background:s.bg,color:s.text,borderColor:s.bg}} className="px-2 py-2 rounded-lg text-xs font-bold border-2">{s.label}</button>
-          ))}
+          {STATUS_OPTIONS.map(s=>{
+            const blocked = s.value === 'accepted' && !deal.contract_uploaded;
+            return(
+              <button key={s.value} type="button"
+                onClick={()=>{
+                  if (blocked) {
+                    alert('📋 Upload the executed contract first before moving to "Accepted / Under Contract".\n\nGo to the offer detail view → Documents & Photos → Upload the Contract file.');
+                    return;
+                  }
+                  u('status', s.value);
+                }}
+                style={deal.status===s.value?{background:s.color,color:'white',borderColor:s.color}:{background:s.bg,color:s.text,borderColor:s.bg}}
+                className={`px-2 py-2 rounded-lg text-xs font-bold border-2 relative ${blocked?'opacity-50 cursor-not-allowed':''}`}>
+                {s.label}
+                {blocked&&<span className="absolute -top-1 -right-1 text-xs">🔒</span>}
+              </button>
+            );
+          })}
         </div>
+        {deal.status==='accepted'&&deal.contract_uploaded&&deal.option_period_expiration&&(
+          <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg text-xs text-green-800">
+            ✅ Contract uploaded · Option expires {new Date(deal.option_period_expiration+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+          </div>
+        )}
         {deal.status==='dead'&&(
           <div className="mt-2"><label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">Dead Reason</label>
           <select value={deal.dead_reason||''} onChange={e=>u('dead_reason',e.target.value)} className={inputCls}>
@@ -1505,20 +2593,66 @@ function BuyerFormFields({ buyer, setBuyer }) {
   const cls = "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 text-sm";
   return (
     <>
-      <FField label="Name *"><input type="text" value={buyer.name||''} onChange={e=>u('name',e.target.value)} className={cls} placeholder="Ash Hoss"/></FField>
-      <FField label="Company"><input type="text" value={buyer.company||''} onChange={e=>u('company',e.target.value)} className={cls} placeholder="Prophet Homes"/></FField>
-      <div className="grid grid-cols-2 gap-3">
-        <FField label="Phone"><input type="tel" value={buyer.phone||''} onChange={e=>u('phone',e.target.value)} className={cls} placeholder="214.555.1234"/></FField>
-        <FField label="Email"><input type="email" value={buyer.email||''} onChange={e=>u('email',e.target.value)} className={cls} placeholder="ash@prophethomes.com"/></FField>
+      {/* Contact */}
+      <div className="space-y-3">
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Contact Info</p>
+        <FField label="Name *"><input type="text" value={buyer.name||''} onChange={e=>u('name',e.target.value)} className={cls} placeholder="Ash Hoss"/></FField>
+        <FField label="Company"><input type="text" value={buyer.company||''} onChange={e=>u('company',e.target.value)} className={cls} placeholder="Prophet Homes"/></FField>
+        <div className="grid grid-cols-2 gap-3">
+          <FField label="Phone"><input type="tel" value={buyer.phone||''} onChange={e=>u('phone',e.target.value)} className={cls} placeholder="214.555.1234"/></FField>
+          <FField label="Email"><input type="email" value={buyer.email||''} onChange={e=>u('email',e.target.value)} className={cls} placeholder="ash@prophethomes.com"/></FField>
+        </div>
+        <FField label="Type"><select value={buyer.type||'daisy_chain'} onChange={e=>u('type',e.target.value)} className={cls}><option value="daisy_chain">Daisy Chain Buyer</option><option value="end_buyer">End Buyer</option></select></FField>
       </div>
-      <FField label="Type"><select value={buyer.type||'daisy_chain'} onChange={e=>u('type',e.target.value)} className={cls}><option value="daisy_chain">Daisy Chain Buyer</option><option value="end_buyer">End Buyer</option></select></FField>
-      <div className="grid grid-cols-2 gap-3">
-        <FField label="Buy Box Min ($)"><input type="number" value={buyer.buy_box_min||''} onChange={e=>u('buy_box_min',e.target.value)} className={cls} placeholder="150000"/></FField>
-        <FField label="Buy Box Max ($)"><input type="number" value={buyer.buy_box_max||''} onChange={e=>u('buy_box_max',e.target.value)} className={cls} placeholder="500000"/></FField>
+
+      {/* Buy Box */}
+      <div className="space-y-3 pt-2 border-t border-gray-200">
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">🎯 Buy Box</p>
+
+        <div className="grid grid-cols-2 gap-3">
+          <FField label="Min Price ($)">
+            <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-semibold">$</span>
+            <input type="number" value={buyer.buy_box_min||''} onChange={e=>u('buy_box_min',e.target.value)} className={cls+' pl-7'} placeholder="150000"/></div>
+          </FField>
+          <FField label="Max Price ($)">
+            <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-semibold">$</span>
+            <input type="number" value={buyer.buy_box_max||''} onChange={e=>u('buy_box_max',e.target.value)} className={cls+' pl-7'} placeholder="500000"/></div>
+          </FField>
+        </div>
+
+        <FField label="📍 Cities / Areas (comma separated)">
+          <input type="text" value={buyer.buy_box_cities||''} onChange={e=>u('buy_box_cities',e.target.value)} className={cls} placeholder="Forney, Mesquite, Garland, Balch Springs"/>
+          <p className="text-xs text-gray-400 mt-1">Used for city filter — be specific</p>
+        </FField>
+
+        <FField label="🏠 Property Types">
+          <input type="text" value={buyer.buy_box_property_types||''} onChange={e=>u('buy_box_property_types',e.target.value)} className={cls} placeholder="SFR, Multi-Family, Condo"/>
+        </FField>
+
+        <FField label="📋 Deal Types">
+          <input type="text" value={buyer.buy_box_deal_types||''} onChange={e=>u('buy_box_deal_types',e.target.value)} className={cls} placeholder="Sub-To, Wholesale, Cash"/>
+        </FField>
+
+        <FField label="🔨 Condition">
+          <input type="text" value={buyer.buy_box_condition||''} onChange={e=>u('buy_box_condition',e.target.value)} className={cls} placeholder="As-Is, Light to Moderate Repairs OK"/>
+        </FField>
+
+        <div className="grid grid-cols-2 gap-3">
+          <FField label="🔧 Max Repairs ($)">
+            <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-semibold">$</span>
+            <input type="number" value={buyer.buy_box_max_repairs||''} onChange={e=>u('buy_box_max_repairs',e.target.value)} className={cls+' pl-7'} placeholder="50000"/></div>
+          </FField>
+          <FField label="⏱️ Close Timeline (days)">
+            <input type="number" value={buyer.buy_box_timeline_days||''} onChange={e=>u('buy_box_timeline_days',e.target.value)} className={cls} placeholder="30"/>
+          </FField>
+        </div>
       </div>
-      <FField label="Areas"><input type="text" value={buyer.buy_box_areas||''} onChange={e=>u('buy_box_areas',e.target.value)} className={cls} placeholder="DFW, Collin County, Denton County"/></FField>
-      <FField label="Notes"><textarea value={buyer.notes||''} onChange={e=>u('notes',e.target.value)} rows={2} className={cls+" resize-none"} placeholder="Notes..."/></FField>
-      <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={buyer.active} onChange={e=>u('active',e.target.checked)} className="w-4 h-4"/><span className="text-sm text-gray-700">Active buyer</span></label>
+
+      {/* Notes + status */}
+      <div className="space-y-3 pt-2 border-t border-gray-200">
+        <FField label="Notes"><textarea value={buyer.notes||''} onChange={e=>u('notes',e.target.value)} rows={2} className={cls+" resize-none"} placeholder="How you work together, special requirements..."/></FField>
+        <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={buyer.active} onChange={e=>u('active',e.target.checked)} className="w-4 h-4"/><span className="text-sm text-gray-700 font-semibold">Active buyer</span></label>
+      </div>
     </>
   );
 }
@@ -1548,6 +2682,17 @@ function LoiForm({ loi, setLoi }) {
         <FField label="Closing (days)"><input type="number" value={loi.closing_days} onChange={e=>u('closing_days',parseInt(e.target.value)||0)} className={cls} placeholder="15"/></FField>
       </div>
       <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={loi.include_subto} onChange={e=>u('include_subto',e.target.checked)} className="w-4 h-4"/><span className="text-sm text-gray-700">Include Subject-To option</span></label>
+      {loi.include_subto&&(
+        <div className="ml-6 mt-2">
+          <FField label="Cash to Seller at COE (Sub-To)">
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-semibold text-sm">$</span>
+              <input type="number" value={loi.cash_to_seller||''} onChange={e=>u('cash_to_seller',e.target.value)} className={cls+' pl-7 font-semibold'} placeholder="13000"/>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">Leave blank for $0 to seller</p>
+          </FField>
+        </div>
+      )}
     </div>
   );
 }
@@ -1576,8 +2721,8 @@ function LoiPreviewBlock({ data }) {
         <li><strong>Closing:</strong> {data.closing_days} days from Effective Date</li>
         <li>Buyer pays all reasonable closing costs · As-Is · Buyer's choice of Escrow</li>
       </ul>
-      {data.include_subto&&<><h3 style={{color:NAVY,fontSize:'11pt',marginTop:'14px',marginBottom:'6px'}}>OPTION 2 — SUBJECT-TO EXISTING MORTGAGE</h3><ul style={{marginTop:0,paddingLeft:'20px'}}><li><strong>Purchase Price:</strong> Subject-to existing mortgage · $0 cash to Seller at COE</li><li>Seller leaves loan; Buyer assumes payments</li><li><strong>Agent Fee:</strong> 1% by Buyer · Buyer pays closing costs</li><li><strong>DD:</strong> 15 biz days · Close: On or before 60 days</li></ul></>}
-      <p><strong>Summary:</strong> {data.include_subto?'Cash = fast close. Sub-To = $0 obligation for seller, we take full responsibility + pay your commission.':'Cash provides a fast certain close.'} Happy to discuss.</p>
+      {data.include_subto&&<><h3 style={{color:NAVY,fontSize:'11pt',marginTop:'14px',marginBottom:'6px'}}>OPTION 2 — SUBJECT-TO EXISTING MORTGAGE</h3><ul style={{marginTop:0,paddingLeft:'20px'}}><li><strong>Purchase Price:</strong> Subject-to existing mortgage · {data.cash_to_seller?`$${parseFloat(data.cash_to_seller).toLocaleString()}`:'$0'} cash to Seller at COE</li><li>Seller leaves loan; Buyer assumes payments</li><li><strong>Agent Fee:</strong> 1% by Buyer · Buyer pays closing costs</li><li><strong>DD:</strong> 15 biz days · Close: On or before 60 days</li></ul></>}
+      <p><strong>Summary:</strong> {data.include_subto ? `Cash = fast certain close. ${data.cash_to_seller && parseFloat(data.cash_to_seller) > 0 ? `Sub-To puts $${parseFloat(data.cash_to_seller).toLocaleString()} in your client's pocket at closing while we take on the mortgage + pay your commission.` : `Sub-To = $0 obligation for seller, we take full responsibility + pay your commission.`}` : 'Cash provides a fast certain close.'} Happy to discuss.</p>
       <p style={{marginTop:'18pt'}}>Sincerely,</p>
       <p style={{fontWeight:'bold',color:NAVY,marginTop:'18pt',marginBottom:0}}>{data.sender_name}</p>
       <p style={{fontSize:'8pt',color:'#6b7280',marginTop:'2pt'}}>{COMPANY} · {data.sender_phone||''} {data.sender_phone&&data.sender_email?'·':''} {data.sender_email}</p>
@@ -2207,5 +3352,94 @@ function PsaPreview({ psa }) {
         <p style={{ fontSize: '8pt', color: '#6b7280', margin: 0 }}><strong>Buyer (Pre-filled):</strong> QP Holdings, LLC, a Wyoming limited liability company · 30 N Gould St. Ste: R, Sheridan, WY 82801 · 214-702-6883 · Authorized Signer: Michael Harry</p>
       </div>
     </div>
+  );
+}
+
+// ============================================================
+// EVENT FORM FIELDS COMPONENT
+// ============================================================
+const EVENT_TYPES_STATIC = [
+  { value: 'call', label: 'Call / Follow-Up', icon: '📞' },
+  { value: 'appointment', label: 'Appointment', icon: '📅' },
+  { value: 'meeting', label: 'Meeting', icon: '🤝' },
+  { value: 'showing', label: 'Showing / Walkthrough', icon: '🏡' },
+  { value: 'busy', label: 'Busy Block', icon: '🔲' },
+  { value: 'deal_deadline', label: 'Deal Deadline', icon: '⚠️' },
+];
+
+function EventFormFields({ event, setEvent, deals }) {
+  const u = (f, v) => setEvent({ ...event, [f]: v });
+  const cls = 'w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 text-sm';
+  return (
+    <>
+      {/* Type */}
+      <div>
+        <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">Event Type</label>
+        <div className="grid grid-cols-3 gap-2">
+          {EVENT_TYPES_STATIC.map(t => (
+            <button key={t.value} type="button" onClick={() => u('type', t.value)}
+              className={`px-2 py-2 rounded-lg text-xs font-semibold border-2 text-center transition-all ${event.type === t.value ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+              {t.icon} {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Title */}
+      <FField label="Title *">
+        <input type="text" value={event.title} onChange={e => u('title', e.target.value)} className={cls}
+          placeholder={event.type === 'call' ? 'Call back: Mark Abraham' : event.type === 'showing' ? 'Walkthrough: 2006 Placerville' : event.type === 'busy' ? 'Out of office' : 'Event title'}/>
+      </FField>
+
+      {/* Date and Time */}
+      <div className="grid grid-cols-3 gap-3">
+        <FField label="Date *">
+          <input type="date" value={event.date} onChange={e => u('date', e.target.value)} className={cls}/>
+        </FField>
+        <FField label="Start Time">
+          <input type="time" value={event.start_time} onChange={e => u('start_time', e.target.value)} className={cls}/>
+        </FField>
+        <FField label="End Time">
+          <input type="time" value={event.end_time} onChange={e => u('end_time', e.target.value)} className={cls}/>
+        </FField>
+      </div>
+
+      {/* Call-specific */}
+      {(event.type === 'call') && (
+        <div className="grid grid-cols-2 gap-3">
+          <FField label="Agent / Contact Name">
+            <input type="text" value={event.agent_name || ''} onChange={e => u('agent_name', e.target.value)} className={cls} placeholder="Mark Abraham"/>
+          </FField>
+          <FField label="Phone">
+            <input type="tel" value={event.agent_phone || ''} onChange={e => u('agent_phone', e.target.value)} className={cls} placeholder="214.555.1234"/>
+          </FField>
+        </div>
+      )}
+
+      {/* Location for meetings/showings */}
+      {['meeting', 'showing', 'appointment'].includes(event.type) && (
+        <FField label="Location">
+          <input type="text" value={event.location || ''} onChange={e => u('location', e.target.value)} className={cls} placeholder="Address or Zoom link"/>
+        </FField>
+      )}
+
+      {/* Link to deal */}
+      {deals.length > 0 && (
+        <FField label="Link to Deal (optional)">
+          <select value={event.deal_id || ''} onChange={e => u('deal_id', e.target.value)} className={cls}>
+            <option value="">Not linked to a deal</option>
+            {deals.filter(d => !['dead', 'closed'].includes(d.status)).map(d => (
+              <option key={d.id} value={d.id}>{d.property_address}{d.city ? `, ${d.city}` : ''}</option>
+            ))}
+          </select>
+        </FField>
+      )}
+
+      {/* Notes */}
+      <FField label="Notes">
+        <textarea value={event.notes || ''} onChange={e => u('notes', e.target.value)} rows={2}
+          className={cls + ' resize-none'} placeholder="Any details, prep notes, or reminders..."/>
+      </FField>
+    </>
   );
 }
