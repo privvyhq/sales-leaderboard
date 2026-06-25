@@ -197,7 +197,8 @@ export default function IronbridgeApp() {
       offer_date: new Date().toISOString().split('T')[0],
       property_address: '', city: '', state: 'TX', zip: '', seller_name: '',
       cash_offer: '', include_subto: true, due_diligence_days: 10, closing_days: 15,
-      cash_to_seller: '',
+      cash_to_seller: '', loan_amount: '', agent_fee_pct: '',
+      sub_to_dd_days: 15, sub_to_closing_days: 60,
     };
   }
 
@@ -1056,79 +1057,154 @@ export default function IronbridgeApp() {
 
   // ── LOI PDF & HTML generators ──
   const generateLoiPdf = (doc, data) => {
-    const W = 612, M = 50, CW = W - 2 * M;
-    let y = 50;
-    const hex = (h) => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
-    const [nr,ng,nb] = hex(NAVY); const [gr,gg,gb] = hex(GOLD);
+    const W = 612, M = 54, CW = W - 2 * M;
+    let y = 55;
+    const navy = [28, 66, 84];
+    const black = [0, 0, 0];
+    const gray = [68, 68, 68];
 
-    doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.setTextColor(nr,ng,nb);
-    doc.text(COMPANY, M, y);
-    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(nr,ng,nb);
-    doc.text(data.sender_name, W-M, y-4, { align:'right' });
-    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(0,0,0);
-    if (data.sender_phone) doc.text(`P. ${data.sender_phone}`, W-M, y+8, { align:'right' });
-    doc.text(`E. ${data.sender_email}`, W-M, y+20, { align:'right' });
-    y+=8; doc.setFontSize(7); doc.setTextColor(gr,gg,gb); doc.text('R E A L    E S T A T E', M, y);
-    y+=12; doc.setDrawColor(gr,gg,gb); doc.setLineWidth(1); doc.line(M,y,W-M,y);
-    y+=25; doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(nr,ng,nb);
+    const cash = data.cash_offer ? `$${parseFloat(data.cash_offer).toLocaleString()}` : '$________';
+    const loanAmt = data.loan_amount ? `$${parseFloat(data.loan_amount).toLocaleString()}` : 'Loan Amount';
+    const cashToSeller = data.cash_to_seller ? `$${parseFloat(data.cash_to_seller).toLocaleString()}` : '$___';
+    const agentFee = data.agent_fee_pct || '_____';
+    const ddDays = data.due_diligence_days || '___';
+    const closeDays = data.closing_days || '___';
+    const subToDd = data.sub_to_dd_days || '___';
+    const subToClose = data.sub_to_closing_days || '___';
+    const dateStr = data.offer_date ? new Date(data.offer_date+'T00:00:00').toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'}) : '___';
+
+    // Header — Path Homes LLC
+    doc.setFont('times','bold'); doc.setFontSize(20); doc.setTextColor(...black);
+    doc.text('Path Homes LLC', M, y);
+    y+=10; doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...gray);
+    doc.text('R E A L   E S T A T E', M+10, y);
+    y+=10; doc.setDrawColor(0,0,0); doc.setLineWidth(0.5); doc.line(M, y, W-M, y);
+    y+=14; doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(28,66,84);
     doc.text('LETTER OF INTENT TO PURCHASE', W/2, y, { align:'center' });
-    y+=15; doc.setFillColor(248,245,238); doc.rect(M,y,CW,70,'F');
-    doc.setDrawColor(gr,gg,gb); doc.setLineWidth(0.5); doc.line(M,y,M+CW,y); doc.line(M,y+70,M+CW,y+70);
-    y+=18; doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(nr,ng,nb); doc.text('To:', M+10, y);
-    doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0); doc.text(data.agent_name, M+35, y);
-    doc.setFontSize(9); doc.setTextColor(100,100,100);
-    const ac = [data.agent_phone?`P. ${data.agent_phone}`:null, data.agent_email?`E. ${data.agent_email}`:null].filter(Boolean).join('   ');
-    if (ac) doc.text(ac, W-M-10, y, { align:'right' });
-    y+=18; doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(nr,ng,nb); doc.text('Date:', M+10, y);
-    doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0); doc.text(data.offer_date_formatted, M+45, y);
-    y+=18; doc.setFont('helvetica','bold'); doc.setTextColor(nr,ng,nb); doc.text('Property:', M+10, y);
-    doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0);
-    doc.text([data.property_address, data.city, data.state, data.zip].filter(Boolean).join(', '), M+60, y);
-    y+=30; doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(0,0,0);
-    const intro = `${data.agent_first_name||'Hello'}, thank you for your time. Below is the offer we discussed for ${data.property_address}.`;
-    const il = doc.splitTextToSize(intro, CW); doc.text(il, M, y); y+=il.length*12;
-    y+=10; doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(nr,ng,nb); doc.text('OPTION 1 — CASH OFFER', M, y);
-    y+=15; doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(0,0,0);
-    [`Purchase Price (Cash): $${parseFloat(data.cash_offer).toLocaleString()}`,`Due Diligence: ${data.due_diligence_days} days`,`Closing: ${data.closing_days} days from Effective Date`,'Buyer pays all closing costs','As-Is purchase · Buyer\'s choice of Escrow'].forEach(b=>{doc.text('•',M+5,y);doc.text(b,M+15,y);y+=13;});
+
+    // To line
+    y+=14; doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(...black);
+    doc.text('To : ', M, y);
+    const toX = M + doc.getTextWidth('To : ');
+    doc.text(data.agent_name||'___', toX, y);
+    // Underline agent name
+    const nameW = doc.getTextWidth(data.agent_name||'___');
+    doc.setLineWidth(0.3); doc.line(toX, y+1, toX+nameW, y+1);
+
+    // Date
+    y+=12; doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...gray);
+    doc.text(dateStr, M+24, y);
+
+    // Contact
+    y+=10; doc.setFontSize(8.5); doc.setTextColor(...gray);
+    doc.text('P.    214.702.6883', M, y);
+    y+=10; doc.text('E.    mike@pathhomesbuyers.com', M, y);
+
+    // Body intro
+    y+=14; doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(...black);
+    const intro1 = `We are presenting the offer we discussed for ${data.property_address||'___'}`;
+    const i1lines = doc.splitTextToSize(intro1, CW); doc.text(i1lines, M, y); y+=i1lines.length*12;
+    y+=4; const intro2 = 'Appreciate your time and consideration in creating a win-win solution for all parties.';
+    const i2lines = doc.splitTextToSize(intro2, CW); doc.text(i2lines, M, y); y+=i2lines.length*12;
+
+    // Option 1
+    y+=12; doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text(' Option 1', M, y);
+    y+=12; doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    const opt1text = `Purchase Price Cash: ${cash} Cash - ${ddDays} Day Due Diligence \u2013 ${closeDays}day close`;
+    const o1lines = doc.splitTextToSize(opt1text, CW-36); doc.text(o1lines, M+36, y); y+=o1lines.length*12;
+
+    // Option 2
     if (data.include_subto) {
-      y+=8; doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(nr,ng,nb); doc.text('OPTION 2 — SUBJECT-TO EXISTING MORTGAGE', M, y);
-      y+=15; doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(0,0,0);
-      ['Purchase Price: Subject-to existing mortgage · ' + (data.cash_to_seller ? `$${parseFloat(data.cash_to_seller).toLocaleString()}` : '$0') + ' cash to Seller at COE','Seller leaves loan; Buyer assumes payments','Listing Agent Fee: 1% paid by Buyer · Buyer pays closing costs','Due Diligence: 15 business days · Closing: On or before 60 days','As-Is · Buyer\'s choice of Escrow · Vesting determined during Escrow','Buyer responsible for taxes, insurance, all payments after COE'].forEach(b=>{const bl=doc.splitTextToSize(b,CW-20);doc.text('•',M+5,y);doc.text(bl,M+15,y);y+=bl.length*13;});
+      y+=12; doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text(' Option 2', M, y);
+      y+=12; doc.setFont('helvetica','normal'); doc.setFontSize(10);
+      const bullets = [
+        `Purchase Price Subject-to existing mortgage: ${loanAmt}`,
+        `${cashToSeller} Cash to Seller at COE`,
+        'Seller to leave existing loan in place and buyer will take over and make the payments',
+        `Buyer to pay Listing Agent Fee (${agentFee})`,
+        'Buyer pays all reasonable closing costs',
+        `${subToDd} BUSINESS DAY Due Diligence from Effective Date`,
+        `CLOSING: On or Before ${subToClose} Days`,
+        'AS IS PURCHASE',
+        "Buyer's choice of Escrow",
+        'Exact Vesting to be determined During Escrow',
+        'Buyer responsible for Taxes, Insurance (if any), and all other payments related to the property.',
+        'The seller may leave any unwanted items on the property upon closing',
+      ];
+      bullets.forEach(b => {
+        doc.text('\u2022', M+16, y);
+        const bl = doc.splitTextToSize(b, CW-28); doc.text(bl, M+24, y); y+=bl.length*12;
+      });
     }
-    y+=8; doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('Summary:', M, y);
-    doc.setFont('helvetica','normal');
-    const cashToSellerSummary = data.cash_to_seller && parseFloat(data.cash_to_seller) > 0
-      ? `Sub-To lets your client walk away with $${parseFloat(data.cash_to_seller).toLocaleString()} at closing while we take on the existing mortgage + pay your commission.`
-      : `Sub-To lets your client walk away at $0 obligation while we take on full responsibility + pay your commission.`;
-    const sum = data.include_subto?`Cash = fast certain close. ${cashToSellerSummary} Happy to discuss.`:'Cash provides a fast certain close. Happy to discuss further.';
-    const sl = doc.splitTextToSize(sum, CW-55); doc.text(sl, M+55, y); y+=sl.length*12+15;
-    doc.text('Sincerely,', M, y); y+=30; doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(nr,ng,nb); doc.text(data.sender_name, M, y);
-    y+=13; doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(100,100,100);
-    doc.text([COMPANY, data.sender_phone, data.sender_email].filter(Boolean).join(' · '), M, y);
+
+    // Summary
+    y+=10;
+    const sum1 = 'To summarize, we are providing a solution for your client to smoothly transition without any financial obligation by taking on full responsibility of the home and paying your commissions.';
+    const s1l = doc.splitTextToSize(sum1, CW); doc.text(s1l, M, y); y+=s1l.length*12;
+    y+=4;
+    const sum2 = 'We would be happy to discuss any questions further. Looking forward to doing repeated business with you';
+    const s2l = doc.splitTextToSize(sum2, CW); doc.text(s2l, M, y); y+=s2l.length*12;
+
+    y+=16; doc.text('Sincerely,', M, y);
+    y+=24; doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(28,66,84);
+    doc.text(data.sender_name||'Mike Harry', M, y);
   };
 
   const generateLoiHtml = (data) => {
-    const full = [data.property_address,data.city,data.state,data.zip].filter(Boolean).join(', ');
-    const cash = data.cash_offer ? parseFloat(data.cash_offer).toLocaleString() : '';
-    const cashToSeller = data.cash_to_seller ? `$${parseFloat(data.cash_to_seller).toLocaleString()}` : '$0';
-    const sub = data.include_subto ? `<h3 style="color:${NAVY};font-family:Arial;font-size:11pt;margin-top:14px;margin-bottom:6px;">OPTION 2 &mdash; SUBJECT-TO EXISTING MORTGAGE</h3><ul style="font-family:Arial;font-size:10pt;margin:0;padding-left:20px;"><li><strong>Purchase Price:</strong> Subject-to existing mortgage &middot; ${cashToSeller} cash to Seller at COE</li><li>Seller leaves existing loan in place; Buyer assumes payments</li><li><strong>Agent Fee:</strong> 1% by Buyer &middot; Buyer pays closing costs</li><li><strong>DD:</strong> 15 biz days &middot; Close: On or before 60 days</li><li>As-Is &middot; Buyer's choice of Escrow &middot; Vesting during Escrow</li><li>Buyer responsible for taxes, insurance, all payments after COE</li></ul>` : '';
-    return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page{size:8.5in 11in;margin:.5in}body{font-family:Arial;font-size:10pt}</style></head><body>
-<table style="width:100%;border-collapse:collapse;"><tr><td style="vertical-align:top;"><div style="font-size:18pt;font-weight:bold;color:${NAVY};">${COMPANY}</div><div style="font-size:7pt;color:${GOLD};letter-spacing:3px;">R E A L &nbsp; E S T A T E</div></td><td style="vertical-align:top;text-align:right;"><div style="font-weight:bold;color:${NAVY};">${data.sender_name}</div>${data.sender_phone?`<div>P. ${data.sender_phone}</div>`:''}<div>E. ${data.sender_email}</div></td></tr></table>
-<hr style="border:none;border-top:1.5pt solid ${GOLD};margin:8pt 0;">
-<h1 style="font-size:14pt;color:${NAVY};text-align:center;margin:10pt 0;">LETTER OF INTENT TO PURCHASE</h1>
-<table style="width:100%;border-collapse:collapse;background:#f8f5ee;border-top:1pt solid ${GOLD};border-bottom:1pt solid ${GOLD};"><tr><td style="padding:8pt 10pt;">
-<div style="margin-bottom:6pt;display:flex;justify-content:space-between;"><span><strong style="color:${NAVY};">To:</strong> ${data.agent_name}</span><span style="color:#6b7280;font-size:9pt;">${data.agent_phone?`P. ${data.agent_phone}&nbsp;&nbsp;`:''}${data.agent_email?`E. ${data.agent_email}`:''}</span></div>
-<div style="margin-bottom:6pt;"><strong style="color:${NAVY};">Date:</strong> ${data.offer_date_formatted}</div>
-<div><strong style="color:${NAVY};">Property:</strong> ${full}</div>
-</td></tr></table>
-<p>${data.agent_first_name||'Hello'}, thank you for your time. Below is the offer we discussed for <strong>${data.property_address}</strong>.</p>
-<h3 style="color:${NAVY};font-size:11pt;margin-top:14px;margin-bottom:6px;">OPTION 1 &mdash; CASH OFFER</h3>
-<ul style="font-size:10pt;margin:0;padding-left:20px;"><li><strong>Purchase Price (Cash):</strong> $${cash}</li><li><strong>Due Diligence:</strong> ${data.due_diligence_days} days</li><li><strong>Closing:</strong> ${data.closing_days} days from Effective Date</li><li>Buyer pays all reasonable closing costs</li><li>As-Is &middot; Buyer's choice of Escrow / Title</li></ul>
-${sub}
-<p><strong>Summary:</strong> ${data.include_subto ? `Cash = fast certain close. ${data.cash_to_seller && parseFloat(data.cash_to_seller) > 0 ? `Sub-To puts $${parseFloat(data.cash_to_seller).toLocaleString()} in your client's pocket at closing while we take on the existing mortgage + pay your commission.` : `Sub-To = $0 obligation, we take full responsibility + pay your commission.`} Happy to discuss.` : 'Cash provides a fast certain close. Happy to discuss.'}</p>
-<p style="margin-top:18pt;">Sincerely,</p>
-<p style="font-weight:bold;color:${NAVY};margin-top:18pt;margin-bottom:0;">${data.sender_name}</p>
-<p style="font-size:8pt;color:#6b7280;margin-top:2pt;">${COMPANY} &middot; ${data.sender_phone||''} ${data.sender_phone&&data.sender_email?'&middot;':''} ${data.sender_email}</p>
+    const cash = data.cash_offer ? `$${parseFloat(data.cash_offer).toLocaleString()}` : '$________';
+    const loanAmt = data.loan_amount ? `$${parseFloat(data.loan_amount).toLocaleString()}` : 'Loan Amount';
+    const cashToSeller = data.cash_to_seller ? `$${parseFloat(data.cash_to_seller).toLocaleString()}` : '$___';
+    const agentFee = data.agent_fee_pct || '_____';
+    const ddDays = data.due_diligence_days || '___';
+    const closeDays = data.closing_days || '___';
+    const subToDd = data.sub_to_dd_days || '___';
+    const subToClose = data.sub_to_closing_days || '___';
+    const dateStr = data.offer_date ? new Date(data.offer_date+'T00:00:00').toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'}) : '___';
+
+    const opt2 = data.include_subto ? `
+<p style="font-weight:bold;margin:12pt 0 4pt 0;">&nbsp;Option 2</p>
+<ul style="font-family:Arial;font-size:10pt;margin:0 0 14pt 0;padding-left:32pt;line-height:1.8;">
+  <li>Purchase Price Subject-to existing mortgage: ${loanAmt}</li>
+  <li>${cashToSeller} Cash to Seller at COE</li>
+  <li>Seller to leave existing loan in place and buyer will take over and make the payments</li>
+  <li>Buyer to pay Listing Agent Fee (${agentFee})</li>
+  <li>Buyer pays all reasonable closing costs</li>
+  <li>${subToDd} BUSINESS DAY Due Diligence from Effective Date</li>
+  <li>CLOSING: On or Before ${subToClose} Days</li>
+  <li>AS IS PURCHASE</li>
+  <li>Buyer&#39;s choice of Escrow</li>
+  <li>Exact Vesting to be determined During Escrow</li>
+  <li>Buyer responsible for Taxes, Insurance (if any), and all other payments related to the property.</li>
+  <li>The seller may leave any unwanted items on the property upon closing</li>
+</ul>` : '';
+
+    return `<html><head><meta charset="utf-8"><style>
+@page{size:8.5in 11in;margin:.75in}
+body{font-family:Arial,sans-serif;font-size:10pt;color:#000;line-height:1.5}
+</style></head><body>
+<div style="font-family:'Georgia',serif;font-size:20pt;font-weight:bold;">Path Homes LLC</div>
+<div style="font-size:8pt;letter-spacing:3px;margin-left:12pt;margin-bottom:6pt;">R E A L &nbsp; E S T A T E</div>
+<hr style="border:none;border-top:1px solid #000;margin:8pt 0 10pt 0;">
+<div style="text-align:center;color:#1C4254;font-size:13pt;font-weight:bold;margin-bottom:10pt;">LETTER OF INTENT TO PURCHASE</div>
+
+<div style="margin-bottom:4pt;"><strong>To : </strong><span style="font-weight:bold;text-decoration:underline;">${data.agent_name||'___'}</span></div>
+<div style="font-size:8.5pt;color:#444;margin-left:32pt;margin-bottom:6pt;">${dateStr}</div>
+<div style="font-size:8.5pt;color:#444;">P.&nbsp;&nbsp;&nbsp;214.702.6883</div>
+<div style="font-size:8.5pt;color:#444;margin-bottom:10pt;">E.&nbsp;&nbsp;&nbsp;mike@pathhomesbuyers.com</div>
+
+<div style="margin-bottom:4pt;">We are presenting the offer we discussed for ${data.property_address||'___'}</div>
+<div style="margin-bottom:10pt;">Appreciate your time and consideration in creating a win-win solution for all parties.</div>
+
+<p style="font-weight:bold;margin:12pt 0 4pt 0;">&nbsp;Option 1</p>
+<div style="margin-left:48pt;margin-bottom:14pt;">Purchase Price Cash: ${cash} Cash - ${ddDays} Day Due Diligence &ndash; ${closeDays}day close</div>
+
+${opt2}
+
+<div style="margin-bottom:4pt;">To summarize, we are providing a solution for your client to smoothly transition without any financial obligation by taking on full responsibility of the home and paying your commissions.</div>
+<div style="margin-bottom:14pt;">We would be happy to discuss any questions further. Looking forward to doing repeated business with you</div>
+
+<div style="margin-bottom:16pt;">Sincerely,</div>
+<div style="font-weight:bold;color:#1C4254;">${data.sender_name||'Mike Harry'}</div>
 </body></html>`;
   };
 
@@ -2709,22 +2785,34 @@ function LoiForm({ loi, setLoi }) {
         <FField label="State"><input type="text" value={loi.state} onChange={e=>u('state',e.target.value)} className={cls} placeholder="TX" maxLength={2}/></FField>
         <FField label="Zip"><input type="text" value={loi.zip} onChange={e=>u('zip',e.target.value)} className={cls} placeholder="75126"/></FField>
       </div></div>
+
+      <div><h3 className="text-sm font-bold text-gray-900 mb-2">Option 1 — Cash</h3>
       <div className="grid grid-cols-2 gap-3">
         <FField label="Offer Date"><input type="date" value={loi.offer_date} onChange={e=>u('offer_date',e.target.value)} className={cls}/></FField>
         <FField label="Cash Offer *"><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-semibold text-sm">$</span><input type="number" value={loi.cash_offer} onChange={e=>u('cash_offer',e.target.value)} className={cls+" pl-7 font-semibold"} placeholder="315000"/></div></FField>
         <FField label="Due Diligence (days)"><input type="number" value={loi.due_diligence_days} onChange={e=>u('due_diligence_days',parseInt(e.target.value)||0)} className={cls} placeholder="10"/></FField>
         <FField label="Closing (days)"><input type="number" value={loi.closing_days} onChange={e=>u('closing_days',parseInt(e.target.value)||0)} className={cls} placeholder="15"/></FField>
-      </div>
-      <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={loi.include_subto} onChange={e=>u('include_subto',e.target.checked)} className="w-4 h-4"/><span className="text-sm text-gray-700">Include Subject-To option</span></label>
+      </div></div>
+
+      <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={loi.include_subto} onChange={e=>u('include_subto',e.target.checked)} className="w-4 h-4"/><span className="text-sm font-bold text-gray-900">Include Subject-To option</span></label>
       {loi.include_subto&&(
-        <div className="ml-6 mt-2">
-          <FField label="Cash to Seller at COE (Sub-To)">
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-semibold text-sm">$</span>
-              <input type="number" value={loi.cash_to_seller||''} onChange={e=>u('cash_to_seller',e.target.value)} className={cls+' pl-7 font-semibold'} placeholder="13000"/>
-            </div>
-            <p className="text-xs text-gray-400 mt-1">Leave blank for $0 to seller</p>
+        <div className="ml-4 space-y-3 border-l-2 border-gray-200 pl-4">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Option 2 — Sub-To Fields</p>
+          <FField label="Loan Amount (existing mortgage)">
+            <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-semibold text-sm">$</span>
+            <input type="number" value={loi.loan_amount||''} onChange={e=>u('loan_amount',e.target.value)} className={cls+' pl-7 font-semibold'} placeholder="288000"/></div>
           </FField>
+          <FField label="Cash to Seller at COE">
+            <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-semibold text-sm">$</span>
+            <input type="number" value={loi.cash_to_seller||''} onChange={e=>u('cash_to_seller',e.target.value)} className={cls+' pl-7 font-semibold'} placeholder="13000"/></div>
+          </FField>
+          <FField label="Listing Agent Fee %">
+            <input type="text" value={loi.agent_fee_pct||''} onChange={e=>u('agent_fee_pct',e.target.value)} className={cls} placeholder="3%"/>
+          </FField>
+          <div className="grid grid-cols-2 gap-3">
+            <FField label="Due Diligence (biz days)"><input type="number" value={loi.sub_to_dd_days||15} onChange={e=>u('sub_to_dd_days',parseInt(e.target.value)||0)} className={cls} placeholder="15"/></FField>
+            <FField label="Closing (days)"><input type="number" value={loi.sub_to_closing_days||60} onChange={e=>u('sub_to_closing_days',parseInt(e.target.value)||0)} className={cls} placeholder="60"/></FField>
+          </div>
         </div>
       )}
     </div>
@@ -2732,34 +2820,77 @@ function LoiForm({ loi, setLoi }) {
 }
 
 function LoiPreviewBlock({ data }) {
-  const full=[data.property_address,data.city,data.state,data.zip].filter(Boolean).join(', ');
-  const cash=data.cash_offer?parseFloat(data.cash_offer).toLocaleString():'___';
-  return(
-    <div style={{fontFamily:'Arial,sans-serif',fontSize:'10pt'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-        <div><div style={{fontWeight:'bold',fontSize:'18pt',color:NAVY}}>{COMPANY}</div><div style={{fontSize:'7pt',color:GOLD,letterSpacing:'3px'}}>R E A L &nbsp; E S T A T E</div></div>
-        <div style={{textAlign:'right'}}><div style={{fontWeight:'bold',color:NAVY}}>{data.sender_name}</div>{data.sender_phone&&<div style={{fontSize:'9pt'}}>P. {data.sender_phone}</div>}<div style={{fontSize:'9pt'}}>E. {data.sender_email}</div></div>
+  const cash = data.cash_offer ? `$${parseFloat(data.cash_offer).toLocaleString()}` : '$________';
+  const loanAmt = data.loan_amount ? `$${parseFloat(data.loan_amount).toLocaleString()}` : 'Loan Amount';
+  const cashToSeller = data.cash_to_seller ? `$${parseFloat(data.cash_to_seller).toLocaleString()}` : '$___';
+  const agentFee = data.agent_fee_pct || '_____';
+  const ddDays = data.due_diligence_days || '___';
+  const closeDays = data.closing_days || '___';
+  const subToDd = data.sub_to_dd_days || '___';
+  const subToClose = data.sub_to_closing_days || '___';
+  const dateStr = data.offer_date ? new Date(data.offer_date+'T00:00:00').toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'}) : '___';
+
+  const bodyStyle = {fontFamily:'Arial,sans-serif',fontSize:'10pt',color:'#000',lineHeight:'1.5'};
+  const smallGray = {fontSize:'8.5pt',color:'#444'};
+
+  return (
+    <div style={bodyStyle}>
+      {/* Header */}
+      <div style={{marginBottom:'4pt'}}>
+        <div style={{fontFamily:'Georgia,serif',fontSize:'20pt',fontWeight:'bold',color:'#000'}}>Path Homes LLC</div>
+        <div style={{fontSize:'8pt',letterSpacing:'3px',marginLeft:'12pt',color:'#333'}}>R E A L &nbsp; E S T A T E</div>
       </div>
-      <hr style={{border:'none',borderTop:`1.5pt solid ${GOLD}`,margin:'8pt 0'}}/>
-      <h1 style={{fontSize:'14pt',color:NAVY,textAlign:'center',margin:'10pt 0'}}>LETTER OF INTENT TO PURCHASE</h1>
-      <div style={{background:'#f8f5ee',borderTop:`1pt solid ${GOLD}`,borderBottom:`1pt solid ${GOLD}`,padding:'8pt 10pt'}}>
-        <div style={{marginBottom:'6pt',display:'flex',justifyContent:'space-between'}}><span><strong style={{color:NAVY}}>To:</strong> {data.agent_name||'___'}</span><span style={{color:'#6b7280',fontSize:'9pt'}}>{data.agent_phone&&`P. ${data.agent_phone}  `}{data.agent_email&&`E. ${data.agent_email}`}</span></div>
-        <div style={{marginBottom:'6pt'}}><strong style={{color:NAVY}}>Date:</strong> {data.offer_date_formatted||'___'}</div>
-        <div><strong style={{color:NAVY}}>Property:</strong> {full||'___'}</div>
+      <hr style={{border:'none',borderTop:'1px solid #000',margin:'8pt 0 10pt 0'}}/>
+      <div style={{textAlign:'center',color:'#1C4254',fontSize:'13pt',fontWeight:'bold',marginBottom:'10pt'}}>LETTER OF INTENT TO PURCHASE</div>
+
+      {/* To line */}
+      <div style={{marginBottom:'4pt'}}>
+        <span style={{fontWeight:'bold'}}>To : </span>
+        <span style={{fontWeight:'bold',textDecoration:'underline'}}>{data.agent_name||'___'}</span>
       </div>
-      <p>{data.agent_first_name||'[Agent]'}, thank you for your time. Below is our offer for <strong>{data.property_address||'[property]'}</strong>.</p>
-      <h3 style={{color:NAVY,fontSize:'11pt',marginTop:'14px',marginBottom:'6px'}}>OPTION 1 — CASH OFFER</h3>
-      <ul style={{marginTop:0,paddingLeft:'20px'}}>
-        <li><strong>Purchase Price (Cash):</strong> ${cash}</li>
-        <li><strong>Due Diligence:</strong> {data.due_diligence_days} days</li>
-        <li><strong>Closing:</strong> {data.closing_days} days from Effective Date</li>
-        <li>Buyer pays all reasonable closing costs · As-Is · Buyer's choice of Escrow</li>
-      </ul>
-      {data.include_subto&&<><h3 style={{color:NAVY,fontSize:'11pt',marginTop:'14px',marginBottom:'6px'}}>OPTION 2 — SUBJECT-TO EXISTING MORTGAGE</h3><ul style={{marginTop:0,paddingLeft:'20px'}}><li><strong>Purchase Price:</strong> Subject-to existing mortgage · {data.cash_to_seller?`$${parseFloat(data.cash_to_seller).toLocaleString()}`:'$0'} cash to Seller at COE</li><li>Seller leaves loan; Buyer assumes payments</li><li><strong>Agent Fee:</strong> 1% by Buyer · Buyer pays closing costs</li><li><strong>DD:</strong> 15 biz days · Close: On or before 60 days</li></ul></>}
-      <p><strong>Summary:</strong> {data.include_subto ? `Cash = fast certain close. ${data.cash_to_seller && parseFloat(data.cash_to_seller) > 0 ? `Sub-To puts $${parseFloat(data.cash_to_seller).toLocaleString()} in your client's pocket at closing while we take on the mortgage + pay your commission.` : `Sub-To = $0 obligation for seller, we take full responsibility + pay your commission.`}` : 'Cash provides a fast certain close.'} Happy to discuss.</p>
-      <p style={{marginTop:'18pt'}}>Sincerely,</p>
-      <p style={{fontWeight:'bold',color:NAVY,marginTop:'18pt',marginBottom:0}}>{data.sender_name}</p>
-      <p style={{fontSize:'8pt',color:'#6b7280',marginTop:'2pt'}}>{COMPANY} · {data.sender_phone||''} {data.sender_phone&&data.sender_email?'·':''} {data.sender_email}</p>
+
+      {/* Date */}
+      <div style={{...smallGray,marginLeft:'32pt',marginBottom:'6pt'}}>{dateStr}</div>
+
+      {/* Contact */}
+      <div style={smallGray}>P.&nbsp;&nbsp;&nbsp;214.702.6883</div>
+      <div style={{...smallGray,marginBottom:'10pt'}}>E.&nbsp;&nbsp;&nbsp;mike@pathhomesbuyers.com</div>
+
+      {/* Body */}
+      <div style={{marginBottom:'4pt'}}>We are presenting the offer we discussed for {data.property_address||'___'}</div>
+      <div style={{marginBottom:'10pt'}}>Appreciate your time and consideration in creating a win-win solution for all parties.</div>
+
+      {/* Option 1 */}
+      <div style={{fontWeight:'bold',marginBottom:'4pt'}}>&nbsp;Option 1</div>
+      <div style={{marginLeft:'48pt',marginBottom:'14pt'}}>
+        Purchase Price Cash: {cash} Cash - {ddDays} Day Due Diligence &ndash; {closeDays}day close
+      </div>
+
+      {/* Option 2 */}
+      {data.include_subto&&(<>
+        <div style={{fontWeight:'bold',marginBottom:'6pt'}}>&nbsp;Option 2</div>
+        <ul style={{marginTop:0,marginBottom:'14pt',paddingLeft:'32pt',lineHeight:'1.8'}}>
+          <li>Purchase Price Subject-to existing mortgage: {loanAmt}</li>
+          <li>{cashToSeller} Cash to Seller at COE</li>
+          <li>Seller to leave existing loan in place and buyer will take over and make the payments</li>
+          <li>Buyer to pay Listing Agent Fee ({agentFee})</li>
+          <li>Buyer pays all reasonable closing costs</li>
+          <li>{subToDd} BUSINESS DAY Due Diligence from Effective Date</li>
+          <li>CLOSING: On or Before {subToClose} Days</li>
+          <li>AS IS PURCHASE</li>
+          <li>Buyer&#39;s choice of Escrow</li>
+          <li>Exact Vesting to be determined During Escrow</li>
+          <li>Buyer responsible for Taxes, Insurance (if any), and all other payments related to the property.</li>
+          <li>The seller may leave any unwanted items on the property upon closing</li>
+        </ul>
+      </>)}
+
+      {/* Summary */}
+      <div style={{marginBottom:'4pt'}}>To summarize, we are providing a solution for your client to smoothly transition without any financial obligation by taking on full responsibility of the home and paying your commissions.</div>
+      <div style={{marginBottom:'14pt'}}>We would be happy to discuss any questions further. Looking forward to doing repeated business with you</div>
+
+      <div style={{marginBottom:'16pt'}}>Sincerely,</div>
+      <div style={{fontWeight:'bold',color:'#1C4254'}}>{data.sender_name||'Mike Harry'}</div>
     </div>
   );
 }
