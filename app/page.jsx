@@ -2289,13 +2289,15 @@ ${sub}
         {/* ── NEW EVENT MODAL ── */}
         {showNewEvent&&(
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
-              <div style={{background:NAVY}} className="px-5 py-4 flex justify-between items-center rounded-t-2xl">
+            <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl flex flex-col" style={{maxHeight:'90vh'}}>
+              <div style={{background:NAVY}} className="px-5 py-4 flex justify-between items-center rounded-t-2xl flex-shrink-0">
                 <h2 className="text-lg font-bold text-white flex items-center gap-2"><Calendar size={20}/>Add Event</h2>
                 <button onClick={()=>setShowNewEvent(false)} className="text-white/70 hover:text-white"><X size={24}/></button>
               </div>
-              <div className="p-5 space-y-4">
+              <div className="p-5 space-y-4 overflow-y-auto flex-1">
                 <EventFormFields event={newEvent} setEvent={setNewEvent} deals={deals}/>
+              </div>
+              <div className="p-5 border-t border-gray-200 flex-shrink-0">
                 <button onClick={()=>saveEvent(true)} disabled={savingEvent||!newEvent.title}
                   style={{background:`linear-gradient(135deg,${BURNT_ORANGE} 0%,#a04f12 100%)`}}
                   className="w-full text-white font-semibold py-3 rounded-lg disabled:opacity-60 flex items-center justify-center gap-2">
@@ -2309,13 +2311,15 @@ ${sub}
         {/* ── EDIT EVENT MODAL ── */}
         {editingEvent&&(
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
-              <div style={{background:NAVY}} className="px-5 py-4 flex justify-between items-center rounded-t-2xl">
+            <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl flex flex-col" style={{maxHeight:'90vh'}}>
+              <div style={{background:NAVY}} className="px-5 py-4 flex justify-between items-center rounded-t-2xl flex-shrink-0">
                 <h2 className="text-lg font-bold text-white flex items-center gap-2"><Edit3 size={20}/>Edit Event</h2>
                 <button onClick={()=>setEditingEvent(null)} className="text-white/70 hover:text-white"><X size={24}/></button>
               </div>
-              <div className="p-5 space-y-4">
+              <div className="p-5 space-y-4 overflow-y-auto flex-1">
                 <EventFormFields event={editingEvent} setEvent={setEditingEvent} deals={deals}/>
+              </div>
+              <div className="p-5 border-t border-gray-200 flex-shrink-0">
                 <div className="flex gap-3">
                   <button onClick={()=>saveEvent(false)} disabled={savingEvent}
                     style={{background:`linear-gradient(135deg,${TEAL} 0%,${NAVY} 100%)`}}
@@ -2331,12 +2335,12 @@ ${sub}
 
         {showNewAgent&&(
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
-              <div style={{background:NAVY}} className="px-5 py-4 flex justify-between items-center rounded-t-2xl">
+            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col" style={{maxHeight:'90vh'}}>
+              <div style={{background:NAVY}} className="px-5 py-4 flex justify-between items-center rounded-t-2xl flex-shrink-0">
                 <h2 className="text-lg font-bold text-white">Add Agent</h2>
                 <button onClick={()=>setShowNewAgent(false)} className="text-white/70 hover:text-white"><X size={24}/></button>
               </div>
-              <div className="p-5 space-y-4">
+              <div className="p-5 space-y-4 overflow-y-auto flex-1">
                 <FField label="Name *"><input type="text" value={newAgent.name} onChange={e=>setNewAgent({...newAgent,name:e.target.value})} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900" placeholder="Mark Abraham"/></FField>
                 <FField label="Brokerage"><input type="text" value={newAgent.brokerage} onChange={e=>setNewAgent({...newAgent,brokerage:e.target.value})} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900" placeholder="Keller Williams"/></FField>
                 <div className="grid grid-cols-2 gap-3">
@@ -2344,6 +2348,8 @@ ${sub}
                   <FField label="Email"><input type="email" value={newAgent.email} onChange={e=>setNewAgent({...newAgent,email:e.target.value})} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900" placeholder="agent@example.com"/></FField>
                 </div>
                 <FField label="Notes"><textarea value={newAgent.notes} onChange={e=>setNewAgent({...newAgent,notes:e.target.value})} rows={2} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 text-sm resize-none" placeholder="Notes..."/></FField>
+              </div>
+              <div className="p-5 border-t border-gray-200 flex-shrink-0">
                 <button onClick={()=>saveAgent(true)} disabled={savingAgent||!newAgent.name} style={{background:`linear-gradient(135deg,${BURNT_ORANGE} 0%,#a04f12 100%)`}} className="w-full text-white font-semibold py-3 rounded-lg disabled:opacity-60 flex items-center justify-center gap-2">
                   {savingAgent&&<Loader2 size={18} className="animate-spin"/>}Save Agent
                 </button>
@@ -2355,12 +2361,12 @@ ${sub}
         {/* ── EDIT AGENT MODAL ── */}
         {editingAgent&&(
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
-              <div style={{background:NAVY}} className="px-5 py-4 flex justify-between items-center rounded-t-2xl">
+            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col" style={{maxHeight:'90vh'}}>
+              <div style={{background:NAVY}} className="px-5 py-4 flex justify-between items-center rounded-t-2xl flex-shrink-0">
                 <h2 className="text-lg font-bold text-white">Edit Agent</h2>
                 <button onClick={()=>setEditingAgent(null)} className="text-white/70 hover:text-white"><X size={24}/></button>
               </div>
-              <div className="p-5 space-y-4">
+              <div className="p-5 space-y-4 overflow-y-auto flex-1">
                 <FField label="Name *"><input type="text" value={editingAgent.name} onChange={e=>setEditingAgent({...editingAgent,name:e.target.value})} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900"/></FField>
                 <FField label="Brokerage"><input type="text" value={editingAgent.brokerage||''} onChange={e=>setEditingAgent({...editingAgent,brokerage:e.target.value})} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900"/></FField>
                 <div className="grid grid-cols-2 gap-3">
@@ -2368,6 +2374,8 @@ ${sub}
                   <FField label="Email"><input type="email" value={editingAgent.email||''} onChange={e=>setEditingAgent({...editingAgent,email:e.target.value})} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900"/></FField>
                 </div>
                 <FField label="Notes"><textarea value={editingAgent.notes||''} onChange={e=>setEditingAgent({...editingAgent,notes:e.target.value})} rows={2} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 text-sm resize-none"/></FField>
+              </div>
+              <div className="p-5 border-t border-gray-200 flex-shrink-0">
                 <div className="flex gap-3">
                   <button onClick={()=>saveAgent(false)} disabled={savingAgent} style={{background:`linear-gradient(135deg,${TEAL} 0%,${NAVY} 100%)`}} className="flex-1 text-white font-semibold py-3 rounded-lg disabled:opacity-60 flex items-center justify-center gap-2">
                     {savingAgent&&<Loader2 size={18} className="animate-spin"/>}Save
@@ -2382,13 +2390,15 @@ ${sub}
         {/* ── NEW BUYER MODAL ── */}
         {showNewBuyer&&(
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
-              <div style={{background:NAVY}} className="px-5 py-4 flex justify-between items-center rounded-t-2xl">
+            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col" style={{maxHeight:'90vh'}}>
+              <div style={{background:NAVY}} className="px-5 py-4 flex justify-between items-center rounded-t-2xl flex-shrink-0">
                 <h2 className="text-lg font-bold text-white">Add Buyer</h2>
                 <button onClick={()=>setShowNewBuyer(false)} className="text-white/70 hover:text-white"><X size={24}/></button>
               </div>
-              <div className="p-5 space-y-4">
+              <div className="p-5 space-y-4 overflow-y-auto flex-1">
                 <BuyerFormFields buyer={newBuyer} setBuyer={setNewBuyer}/>
+              </div>
+              <div className="p-5 border-t border-gray-200 flex-shrink-0">
                 <button onClick={()=>saveBuyer(true)} disabled={savingBuyer||!newBuyer.name} style={{background:`linear-gradient(135deg,${BURNT_ORANGE} 0%,#a04f12 100%)`}} className="w-full text-white font-semibold py-3 rounded-lg disabled:opacity-60 flex items-center justify-center gap-2">
                   {savingBuyer&&<Loader2 size={18} className="animate-spin"/>}Save Buyer
                 </button>
@@ -2400,16 +2410,18 @@ ${sub}
         {/* ── EDIT BUYER MODAL ── */}
         {editingBuyer&&(
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
-              <div style={{background:NAVY}} className="px-5 py-4 flex justify-between items-center rounded-t-2xl">
+            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col" style={{maxHeight:'90vh'}}>
+              <div style={{background:NAVY}} className="px-5 py-4 flex justify-between items-center rounded-t-2xl flex-shrink-0">
                 <h2 className="text-lg font-bold text-white">Edit Buyer</h2>
                 <button onClick={()=>setEditingBuyer(null)} className="text-white/70 hover:text-white"><X size={24}/></button>
               </div>
-              <div className="p-5 space-y-4">
+              <div className="p-5 space-y-4 overflow-y-auto flex-1">
                 <BuyerFormFields buyer={editingBuyer} setBuyer={setEditingBuyer}/>
+              </div>
+              <div className="p-5 border-t border-gray-200 flex-shrink-0">
                 <div className="flex gap-3">
                   <button onClick={()=>saveBuyer(false)} disabled={savingBuyer} style={{background:`linear-gradient(135deg,${TEAL} 0%,${NAVY} 100%)`}} className="flex-1 text-white font-semibold py-3 rounded-lg disabled:opacity-60 flex items-center justify-center gap-2">
-                    {savingBuyer&&<Loader2 size={18} className="animate-spin"/>}Save
+                    {savingBuyer&&<Loader2 size={18} className="animate-spin"/>}Save Changes
                   </button>
                   <button onClick={deleteBuyer} disabled={savingBuyer} className="px-4 py-3 rounded-lg bg-red-50 text-red-700 font-semibold hover:bg-red-100 flex items-center gap-2"><Trash2 size={18}/></button>
                 </div>
