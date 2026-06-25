@@ -752,15 +752,36 @@ export default function IronbridgeApp() {
   };
 
   const saveAgentFromDeal = async (deal) => {
-    if (!deal.agent_email && !deal.agent_name) return null;
+    // Need at least a name to save an agent
+    if (!deal.agent_name) return null;
     try {
-      const existing = agents.find(a => a.email && a.email === deal.agent_email);
-      if (existing) return existing.id;
+      // Dedupe: match on email first, then name+brokerage
+      const existing = agents.find(a =>
+        (deal.agent_email && a.email && a.email.toLowerCase() === deal.agent_email.toLowerCase()) ||
+        (a.name.toLowerCase() === deal.agent_name.toLowerCase() && a.brokerage === deal.agent_brokerage)
+      );
+      if (existing) {
+        // Update with any new info we got
+        const updates = {};
+        if (!existing.phone && deal.agent_phone) updates.phone = deal.agent_phone;
+        if (!existing.email && deal.agent_email) updates.email = deal.agent_email;
+        if (!existing.brokerage && deal.agent_brokerage) updates.brokerage = deal.agent_brokerage;
+        if (Object.keys(updates).length > 0) {
+          await supa(`/rest/v1/agents?id=eq.${existing.id}`, {
+            method: 'PATCH',
+            headers: { 'Prefer': 'return=minimal' },
+            body: JSON.stringify(updates),
+          });
+          setAgents(prev => prev.map(a => a.id === existing.id ? { ...a, ...updates } : a));
+        }
+        return existing.id;
+      }
+      // New agent — save to agents table
       const res = await supa('/rest/v1/agents', {
         method: 'POST',
         headers: { 'Prefer': 'return=representation' },
         body: JSON.stringify({
-          name: deal.agent_name || '',
+          name: deal.agent_name,
           phone: deal.agent_phone || null,
           email: deal.agent_email || null,
           brokerage: deal.agent_brokerage || null,
@@ -771,7 +792,7 @@ export default function IronbridgeApp() {
         setAgents(prev => [...prev, res[0]]);
         return res[0].id;
       }
-    } catch { }
+    } catch (e) { console.warn('Agent save failed:', e.message); }
     return null;
   };
 
@@ -784,7 +805,8 @@ export default function IronbridgeApp() {
       payload.user_id = user.id;
       await supa('/rest/v1/deals', { method: 'POST', headers: { 'Prefer': 'return=minimal' }, body: JSON.stringify(payload) });
       setNewDeal(blankDeal());
-      setSubmitMsg('Offer added');
+      const agentSaved = newDeal.agent_name ? ` · Agent ${newDeal.agent_name} saved to rolodex` : '';
+      setSubmitMsg('Offer added' + agentSaved);
       await loadAll();
       setTab('offers');
       setTimeout(() => setSubmitMsg(''), 2500);
