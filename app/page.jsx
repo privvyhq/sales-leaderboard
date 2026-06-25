@@ -965,7 +965,7 @@ export default function IronbridgeApp() {
         method: 'POST', headers: { 'Prefer': 'return=minimal' },
         body: JSON.stringify({
           user_id: user.id, property_address: data.property_address, city: data.city || null, state: data.state || null, zip: data.zip || null, seller_name: data.seller_name || null, offer_date: data.offer_date || null, initial_assignment_fee: data.cash_offer ? parseFloat(data.cash_offer) : null, status: 'offer_made', agent_name: data.agent_name || null, agent_phone: data.agent_phone || null, agent_email: data.agent_email || null, lead_source: 'MLS Active', loi_generated_date: new Date().toISOString().split('T')[0],
-          notes: `LOI sent to ${data.agent_name}. Cash: $${data.cash_offer}. ${data.include_subto ? 'Sub-To included.' : ''}`,
+          notes: `LOI sent to ${data.agent_name}. Cash: $${parseFloat(data.cash_offer).toLocaleString()}. ${data.include_subto ? 'Sub-To included.' : ''}`,
         }),
       });
       await loadAll();
